@@ -16,19 +16,30 @@
 //
 // implement the SYS_user_print syscall
 //
-ssize_t sys_user_print(const char* buf, size_t n) {
-  sprint(buf);
-  return 0;
+ssize_t sys_user_print(const char *buf, size_t n) {
+    sprint(buf);
+    return 0;
 }
 
 //
 // implement the SYS_user_exit syscall
 //
 ssize_t sys_user_exit(uint64 code) {
-  sprint("User exit with code:%d.\n", code);
-  // in lab1, PKE considers only one app (one process). 
-  // therefore, shutdown the system when the app calls exit()
-  shutdown(code);
+    sprint("User exit with code:%d.\n", code);
+    // in lab1, PKE considers only one app (one process).
+    // therefore, shutdown the system when the app calls exit()
+    shutdown(code);
+}
+
+/**
+ * @brief 处理打印调用栈的系统调用
+ *
+ * @version 0.1
+ * @author EpsilonZYJ (yujie.zhou05@outlook.com)
+ * @date 2025-10-20
+ * @copyright Copyright (c) 2025
+ */
+ssize_t sys_user_print_backtrace(int depth) {
 }
 
 //
@@ -36,12 +47,14 @@ ssize_t sys_user_exit(uint64 code) {
 // returns the code of success, (e.g., 0 means success, fail for otherwise)
 //
 long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7) {
-  switch (a0) {
+    switch (a0) {
     case SYS_user_print:
-      return sys_user_print((const char*)a1, a2);
+        return sys_user_print((const char *)a1, a2);
     case SYS_user_exit:
-      return sys_user_exit(a1);
+        return sys_user_exit(a1);
+    case SYS_user_print_backtrace:
+        return sys_user_print_backtrace(a1);
     default:
-      panic("Unknown syscall %ld \n", a0);
-  }
+        panic("Unknown syscall %ld \n", a0);
+    }
 }
