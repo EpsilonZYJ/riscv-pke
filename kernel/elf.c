@@ -130,6 +130,21 @@ void load_bincode_from_host_elf(process *p) {
     // load elf. elf_load() is defined above.
     if (elf_load(&elfloader) != EL_OK) panic("Fail on loading elf.\n");
 
+    // 加载符号表
+    elf_status symtab_load_status = elf_load_symbol_table(&elfloader);
+    switch (symtab_load_status) {
+    case EL_OK: break;
+    case EL_EIO:
+        sprint("I/O error when loading symbol table from ELF.\n");
+        break;
+    case EL_ERR:
+        sprint("Error when loading symbol table from ELF.\n");
+        break;
+    default:
+        sprint("Unknown error when loading symbol table from ELF.\n");
+        break;
+    }
+
     // entry (virtual, also physical in lab1_x) address
     p->trapframe->epc = elfloader.ehdr.entry;
 
