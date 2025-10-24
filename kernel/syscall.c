@@ -40,6 +40,15 @@ ssize_t sys_user_exit(uint64 code) {
  * @copyright Copyright (c) 2025
  */
 ssize_t sys_user_print_backtrace(int depth) {
+    if (depth <= 0) {
+        return -EINVAL;
+    }
+    current->trapframe->kernel_sp += 32; // skip the saved ra and sp
+    uint32 *ra = (uint32 *)(current->trapframe->kernel_sp + 16);
+    uint32 *fp = (uint32 *)(current->trapframe->kernel_sp + 8);
+    while (depth > 0) {
+
+    }
 }
 
 //
