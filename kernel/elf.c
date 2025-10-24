@@ -156,7 +156,16 @@ void load_bincode_from_host_elf(process *p) {
 
 static symbol_table g_symtab;
 
-// 从ELF文件中加载符号表到静态内存g_symtab中
+/**
+ * @brief 从ELF文件中加载符号表到静态内存g_symtab中
+ *
+ * @param ctx elf上下文
+ * @return elf_status 加载状态
+ * @version 0.1
+ * @author EpsilonZYJ (yujie.zhou05@outlook.com)
+ * @date 2025-10-24
+ * @copyright Copyright (c) 2025
+ */
 elf_status elf_load_symbol_table(elf_ctx *ctx) {
     elf_sec_header sh_symtab;
     int i, off;
@@ -207,10 +216,25 @@ elf_status elf_load_symbol_table(elf_ctx *ctx) {
         return EL_EIO;
     g_symtab.str_table_size = sh_strtab.sh_size;
 
+#ifdef ELF_LOAD_SYMBOL_TABLE_DEBUG
+    for (int i = 0; i < g_symtab.symbol_count; i++) {
+        sprint("Loaded symbol: %s \t at 0x%lx, max addr 0x%lx\n", &g_symtab.str_table[g_symtab.symbols[i].st_name], g_symtab.symbols[i].st_value, g_symtab.symbols[i].st_value + g_symtab.symbols[i].st_size);
+    }
+#endif
+
     return EL_OK;
 }
 
-// 根据地址查找符号名称
+/**
+ * @brief 根据地址查找符号名称
+ *
+ * @param addr 地址
+ * @return const char* 符号名称
+ * @version 0.1
+ * @author EpsilonZYJ (yujie.zhou05@outlook.com)
+ * @date 2025-10-24
+ * @copyright Copyright (c) 2025
+ */
 const char *elf_find_symbol_by_addr(uint64 addr) {
     for (int i = 0; i < g_symtab.symbol_count; i++) {
         elf_symbol_rec *sym = &g_symtab.symbols[i];

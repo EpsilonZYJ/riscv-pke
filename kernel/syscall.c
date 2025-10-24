@@ -10,6 +10,7 @@
 #include "string.h"
 #include "process.h"
 #include "util/functions.h"
+#include "elf.h"
 
 #include "spike_interface/spike_utils.h"
 
@@ -41,14 +42,50 @@ ssize_t sys_user_exit(uint64 code) {
  */
 ssize_t sys_user_print_backtrace(int depth) {
     if (depth <= 0) {
-        return -EINVAL;
+        return EINVAL;
     }
-    current->trapframe->kernel_sp += 32; // skip the saved ra and sp
-    uint32 *ra = (uint32 *)(current->trapframe->kernel_sp + 16);
-    uint32 *fp = (uint32 *)(current->trapframe->kernel_sp + 8);
-    while (depth > 0) {
 
+    // 当前的栈帧指针
+    uint64 *cur_fp;
+    // 当前的返回函数地址
+    uint64 cur_ra;
+    // 当前栈帧的基址指针
+    uint64 *cur_sb = (uint64 *)current->trapframe->regs.sp;
+    // 先从print_backtrace中跳出
+    cur_fp = (uint64 *)((uint64)cur_sb + 32); // 到上一个函数的调用栈栈底
+    cur_sb = (uint64 *)((uint64)cur_fp + 8);  // 上一个函数调用栈的基址
+    cur_ra = *cur_sb;                         // 到调用print_backtrace的返回地址
+
+#ifdef SYS_USER_PRINT_BACKTRACE_DEBUG
+    sprint("=====================================\n");
+    for (int i = 64; i >= -64; i--) {
+        if (!i)
+            sprint("-> ");
+        else
+            sprint("   ");
+        sprint("Stack dump [0x%016lx]: 0x%016lx\n", current->trapframe->regs.sp + 32 + i * sizeof(uint64), *(uint64 *)(current->trapframe->regs.sp + 32 + i * sizeof(uint64)));
     }
+    sprint("=====================================\n");
+#endif
+
+    while (depth > 0) {
+        const char *func_name = elf_find_symbol_by_addr(cur_ra);
+        if (func_name == NULL) {
+            sprint("  [0x%016lx]j <unknown>\n", cur_ra);
+            return ENXIO;
+        } else if (strcmp(func_name, "main") == 0) {
+            sprint("%s\n", func_name);
+            return EINVAL;
+        } else {
+            sprint("%s\n", func_name);
+            depth--;
+            cur_sb = (uint64 *)((uint64)(*cur_fp) - 8); // 到调用函数的栈帧基址
+            cur_ra = *cur_sb;                           // 到调用函数的返回地址
+            cur_fp = (uint64 *)((uint64)cur_sb - 8);    // 更新栈帧指针
+        }
+    }
+
+    return 0;
 }
 
 //
