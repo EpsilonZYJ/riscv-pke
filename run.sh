@@ -3,4 +3,4 @@ echo "=============================Start Compile================================
 make clean
 make
 echo "============================Compile Complete==============================="
-spike ./obj/riscv-pke ./obj/app_helloworld_no_lds
+spike ./obj/riscv-pke ./obj/app_naive_malloc
