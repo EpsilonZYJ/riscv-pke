@@ -72,17 +72,22 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
     }
 }
 
-
 //
 // implements round-robin scheduling. added @lab3_3
 //
 void rrsched() {
-  // TODO (lab3_3): implements round-robin scheduling.
-  // hint: increase the tick_count member of current process by one, if it is bigger than
-  // TIME_SLICE_LEN (means it has consumed its time slice), change its status into READY,
-  // place it in the rear of ready queue, and finally schedule next process to run.
-  panic( "You need to further implement the timer handling in lab3_3.\n" );
-
+    // TODO (lab3_3): implements round-robin scheduling.
+    // hint: increase the tick_count member of current process by one, if it is bigger than
+    // TIME_SLICE_LEN (means it has consumed its time slice), change its status into READY,
+    // place it in the rear of ready queue, and finally schedule next process to run.
+    if (current->tick_count + 1 >= TIME_SLICE_LEN) {
+        current->tick_count = 0;
+        current->status = READY;
+        insert_to_ready_queue(current);
+        schedule();
+    } else {
+        current->tick_count++;
+    }
 }
 
 //
@@ -110,8 +115,8 @@ void smode_trap_handler(void) {
         break;
     case CAUSE_MTIMER_S_TRAP:
         handle_mtimer_trap();
-      // invoke round-robin scheduler. added @lab3_3
-      rrsched();
+        // invoke round-robin scheduler. added @lab3_3
+        rrsched();
         break;
     case CAUSE_STORE_PAGE_FAULT:
     case CAUSE_LOAD_PAGE_FAULT:
