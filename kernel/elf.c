@@ -169,6 +169,7 @@ static symbol_table g_symtab;
 elf_status elf_load_symbol_table(elf_ctx *ctx) {
     elf_sec_header sh_symtab;
     int i, off;
+    int found = 0;
     for (i = 0, off = ctx->ehdr.shoff; i < ctx->ehdr.shnum; i++, off += sizeof(sh_symtab)) {
         // 读取节头
         if (elf_fpread(ctx, (void *)&sh_symtab, sizeof(sh_symtab), off) != sizeof(sh_symtab))
@@ -176,11 +177,12 @@ elf_status elf_load_symbol_table(elf_ctx *ctx) {
 
         if (sh_symtab.sh_type == SHT_SYMTAB) {
             // 找到符号表
+            found = 1;
             break;
         }
     }
 
-    if (sh_symtab.sh_size == 0) {
+    if (!found || sh_symtab.sh_size == 0) {
         sprint("No symbol table found in ELF.\n");
         return EL_ERR;
     }
