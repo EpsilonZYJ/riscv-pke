@@ -3,4 +3,4 @@ echo "=============================Start Compile================================
 make clean
 make
 echo "============================Compile Complete==============================="
-spike ./obj/riscv-pke ./obj/app_long_loop
+spike -p2 ./obj/riscv-pke ./obj/app0 ./obj/app1

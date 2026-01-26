@@ -6,6 +6,7 @@
 #include "kernel/riscv.h"
 #include "kernel/config.h"
 #include "spike_interface/spike_utils.h"
+#include "kernel/sync_utils.h"
 
 //
 // global variables are placed in the .data section.
@@ -30,6 +31,8 @@ extern uint64 g_mem_size;
 // registers when interrupt hapens in M mode. added @lab1_2
 riscv_regs g_itrframe;
 
+static volatile int m_counter = 0;
+
 //
 // get the information of HTIF (calling interface) and the emulated memory by
 // parsing the Device Tree Blog (DTB, actually DTS) stored in memory.
@@ -39,13 +42,13 @@ riscv_regs g_itrframe;
 // platform simulated using Spike.
 //
 void init_dtb(uint64 dtb) {
-  // defined in spike_interface/spike_htif.c, enabling Host-Target InterFace (HTIF)
-  query_htif(dtb);
-  if (htif) sprint("HTIF is available!\r\n");
+    // defined in spike_interface/spike_htif.c, enabling Host-Target InterFace (HTIF)
+    query_htif(dtb);
+    if (htif) sprint("HTIF is available!\r\n");
 
-  // defined in spike_interface/spike_memory.c, obtain information about emulated memory
-  query_mem(dtb);
-  sprint("(Emulated) memory size: %ld MB\n", g_mem_size >> 20);
+    // defined in spike_interface/spike_memory.c, obtain information about emulated memory
+    query_mem(dtb);
+    sprint("(Emulated) memory size: %ld MB\n", g_mem_size >> 20);
 }
 
 //
@@ -53,80 +56,86 @@ void init_dtb(uint64 dtb) {
 // after delegation, syscalls will handled by the PKE OS kernel running in S-mode.
 //
 static void delegate_traps() {
-  // supports_extension macro is defined in kernel/riscv.h
-  if (!supports_extension('S')) {
-    // confirm that our processor supports supervisor mode. abort if it does not.
-    sprint("S mode is not supported.\n");
-    return;
-  }
+    // supports_extension macro is defined in kernel/riscv.h
+    if (!supports_extension('S')) {
+        // confirm that our processor supports supervisor mode. abort if it does not.
+        sprint("S mode is not supported.\n");
+        return;
+    }
 
-  // macros used in following two statements are defined in kernel/riscv.h
-  uintptr_t interrupts = MIP_SSIP | MIP_STIP | MIP_SEIP;
-  uintptr_t exceptions = (1U << CAUSE_MISALIGNED_FETCH) | (1U << CAUSE_FETCH_PAGE_FAULT) |
-                         (1U << CAUSE_BREAKPOINT) | (1U << CAUSE_LOAD_PAGE_FAULT) |
-                         (1U << CAUSE_STORE_PAGE_FAULT) | (1U << CAUSE_USER_ECALL);
+    // macros used in following two statements are defined in kernel/riscv.h
+    uintptr_t interrupts = MIP_SSIP | MIP_STIP | MIP_SEIP;
+    uintptr_t exceptions = (1U << CAUSE_MISALIGNED_FETCH) | (1U << CAUSE_FETCH_PAGE_FAULT) | (1U << CAUSE_BREAKPOINT) | (1U << CAUSE_LOAD_PAGE_FAULT) | (1U << CAUSE_STORE_PAGE_FAULT) | (1U << CAUSE_USER_ECALL);
 
-  // writes 64-bit values (interrupts and exceptions) to 'mideleg' and 'medeleg' (two
-  // priviledged registers of RV64G machine) respectively.
-  //
-  // write_csr and read_csr are macros defined in kernel/riscv.h
-  write_csr(mideleg, interrupts);
-  write_csr(medeleg, exceptions);
-  assert(read_csr(mideleg) == interrupts);
-  assert(read_csr(medeleg) == exceptions);
+    // writes 64-bit values (interrupts and exceptions) to 'mideleg' and 'medeleg' (two
+    // priviledged registers of RV64G machine) respectively.
+    //
+    // write_csr and read_csr are macros defined in kernel/riscv.h
+    write_csr(mideleg, interrupts);
+    write_csr(medeleg, exceptions);
+    assert(read_csr(mideleg) == interrupts);
+    assert(read_csr(medeleg) == exceptions);
 }
 
 //
 // enabling timer interrupt (irq) in Machine mode. added @lab1_3
 //
 void timerinit(uintptr_t hartid) {
-  // fire timer irq after TIMER_INTERVAL from now.
-  *(uint64*)CLINT_MTIMECMP(hartid) = *(uint64*)CLINT_MTIME + TIMER_INTERVAL;
+    // fire timer irq after TIMER_INTERVAL from now.
+    *(uint64 *)CLINT_MTIMECMP(hartid) = *(uint64 *)CLINT_MTIME + TIMER_INTERVAL;
 
-  // enable machine-mode timer irq in MIE (Machine Interrupt Enable) csr.
-  write_csr(mie, read_csr(mie) | MIE_MTIE);
+    // enable machine-mode timer irq in MIE (Machine Interrupt Enable) csr.
+    write_csr(mie, read_csr(mie) | MIE_MTIE);
 }
 
 //
 // m_start: machine mode C entry point.
 //
 void m_start(uintptr_t hartid, uintptr_t dtb) {
-  // init the spike file interface (stdin,stdout,stderr)
-  // functions with "spike_" prefix are all defined in codes under spike_interface/,
-  // sprint is also defined in spike_interface/spike_utils.c
-  spike_file_init();
-  sprint("In m_start, hartid:%d\n", hartid);
+    // init the spike file interface (stdin,stdout,stderr)
+    // functions with "spike_" prefix are all defined in codes under spike_interface/,
+    // sprint is also defined in spike_interface/spike_utils.c
+    write_tp(hartid);
+    if (hartid == 0) {
+        spike_file_init();
+        sprint("In m_start, hartid:%d\n", hartid);
 
-  // init HTIF (Host-Target InterFace) and memory by using the Device Table Blob (DTB)
-  // init_dtb() is defined above.
-  init_dtb(dtb);
+        // init HTIF (Host-Target InterFace) and memory by using the Device Table Blob (DTB)
+        // init_dtb() is defined above.
+        init_dtb(dtb);
+    }
 
-  // save the address of trap frame for interrupt in M mode to "mscratch". added @lab1_2
-  write_csr(mscratch, &g_itrframe);
+    sync_barrier(&m_counter, NCPU);
+    if (hartid != 0) {
+        sprint("In m_start, hartid:%d\n", hartid);
+    }
 
-  // set previous privilege mode to S (Supervisor), and will enter S mode after 'mret'
-  // write_csr is a macro defined in kernel/riscv.h
-  write_csr(mstatus, ((read_csr(mstatus) & ~MSTATUS_MPP_MASK) | MSTATUS_MPP_S));
+    // save the address of trap frame for interrupt in M mode to "mscratch". added @lab1_2
+    write_csr(mscratch, &g_itrframe);
 
-  // set M Exception Program Counter to sstart, for mret (requires gcc -mcmodel=medany)
-  write_csr(mepc, (uint64)s_start);
+    // set previous privilege mode to S (Supervisor), and will enter S mode after 'mret'
+    // write_csr is a macro defined in kernel/riscv.h
+    write_csr(mstatus, ((read_csr(mstatus) & ~MSTATUS_MPP_MASK) | MSTATUS_MPP_S));
 
-  // setup trap handling vector for machine mode. added @lab1_2
-  write_csr(mtvec, (uint64)mtrapvec);
+    // set M Exception Program Counter to sstart, for mret (requires gcc -mcmodel=medany)
+    write_csr(mepc, (uint64)s_start);
 
-  // enable machine-mode interrupts. added @lab1_3
-  write_csr(mstatus, read_csr(mstatus) | MSTATUS_MIE);
+    // setup trap handling vector for machine mode. added @lab1_2
+    write_csr(mtvec, (uint64)mtrapvec);
 
-  // delegate all interrupts and exceptions to supervisor mode.
-  // delegate_traps() is defined above.
-  delegate_traps();
+    // enable machine-mode interrupts. added @lab1_3
+    write_csr(mstatus, read_csr(mstatus) | MSTATUS_MIE);
 
-  // also enables interrupt handling in supervisor mode. added @lab1_3
-  write_csr(sie, read_csr(sie) | SIE_SEIE | SIE_STIE | SIE_SSIE);
+    // delegate all interrupts and exceptions to supervisor mode.
+    // delegate_traps() is defined above.
+    delegate_traps();
 
-  // init timing. added @lab1_3
-  timerinit(hartid);
+    // also enables interrupt handling in supervisor mode. added @lab1_3
+    write_csr(sie, read_csr(sie) | SIE_SEIE | SIE_STIE | SIE_SSIE);
 
-  // switch to supervisor mode (S mode) and jump to s_start(), i.e., set pc to mepc
-  asm volatile("mret");
+    // init timing. added @lab1_3
+    timerinit(hartid);
+
+    // switch to supervisor mode (S mode) and jump to s_start(), i.e., set pc to mepc
+    asm volatile("mret");
 }
