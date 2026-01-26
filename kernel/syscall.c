@@ -22,7 +22,7 @@ static volatile int exit_counter = 0;
 ssize_t sys_user_print(const char *buf, size_t n) {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
-    sprint("hartid = %d: %s\n", hartid, buf);
+    sprint("hartid = %d: %s", hartid, buf);
     return 0;
 }
 

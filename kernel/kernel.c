@@ -27,6 +27,8 @@ void load_user_program(process *proc) {
     proc->kstack = USER_KSTACK + hartid * VM_SIZE_PER_HART;
     proc->trapframe->regs.sp = USER_STACK + hartid * VM_SIZE_PER_HART;
 
+    proc->trapframe->regs.tp = hartid;
+
     // load_bincode_from_host_elf() is defined in kernel/elf.c
     load_bincode_from_host_elf(proc);
 }
