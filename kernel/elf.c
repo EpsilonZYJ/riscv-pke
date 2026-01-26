@@ -8,7 +8,7 @@
 #include "riscv.h"
 #include "spike_interface/spike_utils.h"
 
-#define ELF_C_DEBUG
+// #define ELF_C_DEBUG
 
 #define MAX_DEBUG_LINE_SIZE 0x10000 // 64KB
 
@@ -222,15 +222,7 @@ void make_addr_line(elf_ctx *ctx, char *debug_line, uint64 length) {
                 regs.addr += delta;
                 break;
             }
-            case 10: // DW_LNS_set_prologue_end
-                break;
-            case 11: // DW_LNS_set_epilogue_begin
-                break;
-            case 12: // DW_LNS_set_isa
-                read_uleb128(NULL, &off);
-                break;
             default: { // Special Opcodes
-                if (op < dh->opcode_base) break; // Ignore unknown standard opcodes
                 int adjust = op - dh->opcode_base;
                 int addr_delta = (adjust / dh->line_range) * dh->min_instruction_length;
                 int line_delta = dh->line_base + (adjust % dh->line_range);
@@ -313,18 +305,18 @@ static size_t parse_args(arg_buf *arg_bug_msg) {
  */
 elf_status load_debug_line_section_header(elf_ctx *ctx, char **pdebug_line, uint64 *plength, elf_sect_header *psect_header) {
     psect_header->size = 0;
-    
+
     // 1. Get String Table Section Header
     elf_sect_header shstr_header;
     uint64 shstr_off = ctx->ehdr.shoff + ctx->ehdr.shstrndx * sizeof(elf_sect_header);
     if (elf_fpread(ctx, &shstr_header, sizeof(shstr_header), shstr_off) != sizeof(shstr_header))
         return EL_EIO;
-    
+
     // 2. Load String Table
     if (shstr_header.size > sizeof(debug_line_buf)) return EL_ENOMEM;
     if (elf_fpread(ctx, (void *)debug_line_buf, shstr_header.size, shstr_header.offset) != shstr_header.size)
         return EL_EIO;
-        
+
     char *shstrtab = (char *)debug_line_buf;
 
     // 3. Iterate sections to find .debug_line
@@ -333,7 +325,7 @@ elf_status load_debug_line_section_header(elf_ctx *ctx, char **pdebug_line, uint
     for (i = 0, off = ctx->ehdr.shoff; i < ctx->ehdr.shnum; i++, off += sizeof(*psect_header)) {
         if (elf_fpread(ctx, (void *)psect_header, sizeof(*psect_header), off) != sizeof(*psect_header))
             return EL_EIO;
-            
+
         if (psect_header->type == SHT_PROGBITS) {
             char *name = shstrtab + psect_header->name;
             if (strcmp(name, ".debug_line") == 0) {
@@ -411,18 +403,7 @@ void load_bincode_from_host_elf(process *p) {
     elf_sect_header debug_line_sect_header;
     elf_status debug_line_status = load_debug_line_section_header(&elfloader, &p->debugline, &debug_line_length, &debug_line_sect_header);
     if (debug_line_status == EL_OK) {
-        // load_debug_line_section(&elfloader, debug_line_sect_header);
         make_addr_line(&elfloader, p->debugline, debug_line_length);
-        // int i = 0;
-        // while (i < debug_line_length) {
-        //     // sprint("%d ", p->debugline[i]);
-        //     sprint("%d ", debug_line_buf[i]);
-        //     // if (p->debugline[i] == 0) sprint("\n");
-        //     if (debug_line_buf[i] == 0) sprint("\n");
-        //     if (debug_line_buf[i] != p->debugline[i]) sprint("???");
-        //     i++;
-        // }
-        // panic("111");
     }
 
     // entry (virtual, also physical in lab1_x) address
