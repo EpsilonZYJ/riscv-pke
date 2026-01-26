@@ -88,8 +88,14 @@ void print_error_msg(process *proc) {
 }
 
 static void handle_instruction_access_fault() {
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_instruction_access_fault: entered\n");
+#endif
+    print_error_msg(current);
 
-
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_instruction_access_fault: about to panic\n");
+#endif
     panic("Instruction access fault!");
 }
 
