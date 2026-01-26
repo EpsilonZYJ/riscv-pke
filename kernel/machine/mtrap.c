@@ -1,48 +1,187 @@
 #include "kernel/riscv.h"
 #include "kernel/process.h"
 #include "spike_interface/spike_utils.h"
+#include "util/string.h"
+
+#define MTRAP_C_DEBUG
+
+void print_source_code_line(const char *path, int target_line) {
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]print_source_code_line: path=%s, target_line=%d\n", path, target_line);
+#endif
+    if (!path) return;
+    spike_file_t *f = spike_file_open(path, O_RDONLY, 0);
+    if (IS_ERR_VALUE(f)) panic("Source file not found or cannot be opened: %s\n", path);
+
+    char buf[1];
+    int cur_line = 0;
+    uint64 off = 0;
+    while (cur_line < target_line) {
+        if (spike_file_pread(f, buf, 1, off++) != 1) break;
+        if (buf[0] == '\n') cur_line++;
+    }
+
+    if (cur_line == target_line) {
+        while (1) {
+            if (spike_file_pread(f, buf, 1, off++) != 1) break;
+            if (buf[0] == '\n' || buf[0] == '\r') break;
+            sprint("%c", buf[0]);
+        }
+        sprint("\n");
+    }
+    spike_file_close(f);
+}
+
+void print_error_msg(process *proc) {
+    if (proc->debugline == NULL || proc->dir == NULL || proc->file == NULL) {
+        return;
+    }
+
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]print_error_msg: read epc\n");
+#endif
+
+    uint64 epc = read_csr(mepc);
+    int line_num = -1;
+
+    // 查找最近的epc代码映射
+    for (int i = 0; i < proc->line_ind; i++) {
+        if (proc->line[i].addr <= epc) {
+            if (line_num == -1 || proc->line[i].addr > proc->line[line_num].addr) {
+                line_num = i;
+            }
+        }
+    }
+
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]print_error_msg: found line_num %d\n", line_num);
+#endif
+
+    if (line_num == -1) {
+        return;
+    }
+
+    uint64 file_idx = proc->line[line_num].line;
+    uint64 dir_idx = proc->file[line_num].dir;
+    char *dir_path = proc->dir[dir_idx];
+    char *file_name = proc->file[line_num].file;
+
+    line_num = proc->line[line_num].line;
+
+    sprint("Runtime error at %s/%s: %d\n", dir_path, file_name, line_num);
+    sprint("Runtime error at %d\n", line_num);
+
+    const size_t DIR_PATH_LEN = strlen(dir_path);
+    const size_t FILE_NAME_LEN = strlen(file_name);
+    char full_path[DIR_PATH_LEN + FILE_NAME_LEN + 2];
+    strcpy(full_path, dir_path);
+    full_path[DIR_PATH_LEN] = '/';
+    strcpy(full_path + DIR_PATH_LEN + 1, file_name);
+    print_source_code_line(full_path, line_num);
+}
 
 static void handle_instruction_access_fault() {
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_instruction_access_fault: entered\n");
+#endif
+
+    print_error_msg(current);
+
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_instruction_access_fault: about to panic\n");
+#endif
+
     panic("Instruction access fault!");
 }
 
 static void handle_load_access_fault() {
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_load_access_fault: entered\n");
+#endif
+
+    print_error_msg(current);
+
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_load_access_fault: about to panic\n");
+#endif
+
     panic("Load access fault!");
 }
 
 static void handle_store_access_fault() {
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_store_access_fault: entered\n");
+#endif
+
+    print_error_msg(current);
+
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_store_access_fault: about to panic\n");
+#endif
+
     panic("Store/AMO access fault!");
 }
 
 static void handle_illegal_instruction() {
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_illegal_instruction: entered\n");
+#endif
+
+    print_error_msg(current);
+
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_illegal_instruction: about to panic\n");
+#endif
+
     panic("Illegal instruction!");
 }
 
 static void handle_misaligned_load() {
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_misaligned_load: entered\n");
+#endif
+
+    print_error_msg(current);
+
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_misaligned_load: about to panic\n");
+#endif
+
     panic("Misaligned Load!");
 }
 
-static void handle_misaligned_store() { panic("Misaligned AMO!"); }
+static void handle_misaligned_store() {
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_misaligned_store: entered\n");
+#endif
+    print_error_msg(current);
+
+#ifdef MTRAP_C_DEBUG
+    sprint("[DEBUG]handle_misaligned_store: about to panic\n");
+#endif
+
+    panic("Misaligned AMO!");
+}
 
 // added @lab1_3
 static void handle_timer() {
-  int cpuid = 0;
-  // setup the timer fired at next time (TIMER_INTERVAL from now)
-  *(uint64*)CLINT_MTIMECMP(cpuid) = *(uint64*)CLINT_MTIMECMP(cpuid) + TIMER_INTERVAL;
+    int cpuid = 0;
+    // setup the timer fired at next time (TIMER_INTERVAL from now)
+    *(uint64 *)CLINT_MTIMECMP(cpuid) = *(uint64 *)CLINT_MTIMECMP(cpuid) + TIMER_INTERVAL;
 
-  // setup a soft interrupt in sip (S-mode Interrupt Pending) to be handled in S-mode
-  write_csr(sip, SIP_SSIP);
+    // setup a soft interrupt in sip (S-mode Interrupt Pending) to be handled in S-mode
+    write_csr(sip, SIP_SSIP);
 }
 
 //
 // handle_mtrap calls a handling function according to the type of a machine mode interrupt (trap).
 //
 void handle_mtrap() {
-  uint64 mcause = read_csr(mcause);
-  switch (mcause) {
+    uint64 mcause = read_csr(mcause);
+    switch (mcause) {
     case CAUSE_MTIMER:
-      handle_timer();
-      break;
+        handle_timer();
+        break;
     case CAUSE_FETCH_ACCESS:
         handle_instruction_access_fault();
         break;
