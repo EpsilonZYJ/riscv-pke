@@ -3,7 +3,7 @@
 #include "spike_interface/spike_utils.h"
 #include "util/string.h"
 
-#define MTRAP_C_DEBUG
+// #define MTRAP_C_DEBUG
 
 void print_source_code_line(const char *path, int target_line) {
 #ifdef MTRAP_C_DEBUG
@@ -16,12 +16,12 @@ void print_source_code_line(const char *path, int target_line) {
     char buf[1];
     int cur_line = 0;
     uint64 off = 0;
-    while (cur_line < target_line) {
+    while (cur_line < target_line - 1) {
         if (spike_file_pread(f, buf, 1, off++) != 1) break;
         if (buf[0] == '\n') cur_line++;
     }
 
-    if (cur_line == target_line) {
+    if (cur_line == target_line - 1) {
         while (1) {
             if (spike_file_pread(f, buf, 1, off++) != 1) break;
             if (buf[0] == '\n' || buf[0] == '\r') break;
@@ -61,15 +61,22 @@ void print_error_msg(process *proc) {
         return;
     }
 
-    uint64 file_idx = proc->line[line_num].line;
-    uint64 dir_idx = proc->file[line_num].dir;
+    uint64 file_idx = proc->line[line_num].file;
+    if (file_idx >= 64) {
+        sprint("print_error_msg: file_idx %d out of bounds\n", file_idx);
+        return;
+    }
+    uint64 dir_idx = proc->file[file_idx].dir;
+    if (dir_idx >= 64) {
+        sprint("print_error_msg: dir_idx %d out of bounds\n", dir_idx);
+        return;
+    }
     char *dir_path = proc->dir[dir_idx];
-    char *file_name = proc->file[line_num].file;
+    char *file_name = proc->file[file_idx].file;
 
-    line_num = proc->line[line_num].line;
+    int source_line = proc->line[line_num].line;
 
-    sprint("Runtime error at %s/%s: %d\n", dir_path, file_name, line_num);
-    sprint("Runtime error at %d\n", line_num);
+    sprint("Runtime error at %s/%s:%d\n", dir_path, file_name, source_line);
 
     const size_t DIR_PATH_LEN = strlen(dir_path);
     const size_t FILE_NAME_LEN = strlen(file_name);
@@ -77,19 +84,11 @@ void print_error_msg(process *proc) {
     strcpy(full_path, dir_path);
     full_path[DIR_PATH_LEN] = '/';
     strcpy(full_path + DIR_PATH_LEN + 1, file_name);
-    print_source_code_line(full_path, line_num);
+    print_source_code_line(full_path, source_line);
 }
 
 static void handle_instruction_access_fault() {
-#ifdef MTRAP_C_DEBUG
-    sprint("[DEBUG]handle_instruction_access_fault: entered\n");
-#endif
 
-    print_error_msg(current);
-
-#ifdef MTRAP_C_DEBUG
-    sprint("[DEBUG]handle_instruction_access_fault: about to panic\n");
-#endif
 
     panic("Instruction access fault!");
 }

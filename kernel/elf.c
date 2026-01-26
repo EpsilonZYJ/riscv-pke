@@ -10,9 +10,10 @@
 
 #define ELF_C_DEBUG
 
-#define MAX_DEBUG_LINE_SIZE 0x4000 // 16KB
+#define MAX_DEBUG_LINE_SIZE 0x10000 // 64KB
 
-static char debug_line_buf[MAX_DEBUG_LINE_SIZE];
+// 64KB, aligned
+static uint64 debug_line_buf[MAX_DEBUG_LINE_SIZE / sizeof(uint64)];
 
 typedef struct elf_info_t {
     spike_file_t *f;
@@ -221,8 +222,15 @@ void make_addr_line(elf_ctx *ctx, char *debug_line, uint64 length) {
                 regs.addr += delta;
                 break;
             }
-                // ignore 10, 11 and 12
+            case 10: // DW_LNS_set_prologue_end
+                break;
+            case 11: // DW_LNS_set_epilogue_begin
+                break;
+            case 12: // DW_LNS_set_isa
+                read_uleb128(NULL, &off);
+                break;
             default: { // Special Opcodes
+                if (op < dh->opcode_base) break; // Ignore unknown standard opcodes
                 int adjust = op - dh->opcode_base;
                 int addr_delta = (adjust / dh->line_range) * dh->min_instruction_length;
                 int line_delta = dh->line_base + (adjust % dh->line_range);
@@ -305,46 +313,46 @@ static size_t parse_args(arg_buf *arg_bug_msg) {
  */
 elf_status load_debug_line_section_header(elf_ctx *ctx, char **pdebug_line, uint64 *plength, elf_sect_header *psect_header) {
     psect_header->size = 0;
+    
+    // 1. Get String Table Section Header
+    elf_sect_header shstr_header;
+    uint64 shstr_off = ctx->ehdr.shoff + ctx->ehdr.shstrndx * sizeof(elf_sect_header);
+    if (elf_fpread(ctx, &shstr_header, sizeof(shstr_header), shstr_off) != sizeof(shstr_header))
+        return EL_EIO;
+    
+    // 2. Load String Table
+    if (shstr_header.size > sizeof(debug_line_buf)) return EL_ENOMEM;
+    if (elf_fpread(ctx, (void *)debug_line_buf, shstr_header.size, shstr_header.offset) != shstr_header.size)
+        return EL_EIO;
+        
+    char *shstrtab = (char *)debug_line_buf;
+
+    // 3. Iterate sections to find .debug_line
     int i, off;
     int found = 0;
     for (i = 0, off = ctx->ehdr.shoff; i < ctx->ehdr.shnum; i++, off += sizeof(*psect_header)) {
         if (elf_fpread(ctx, (void *)psect_header, sizeof(*psect_header), off) != sizeof(*psect_header))
             return EL_EIO;
-        // 寻找.debug_line节
+            
         if (psect_header->type == SHT_PROGBITS) {
-#ifdef ELF_C_DEBUG
-            sprint("[DEBUG]load_debug_line_section_header: Found debug line section at offset 0x%lx, size: %d bytes\n",
-                   psect_header->offset, psect_header->size);
-#endif
-
-            found = 1;
-            break;
+            char *name = shstrtab + psect_header->name;
+            if (strcmp(name, ".debug_line") == 0) {
+                found = 1;
+                break;
+            }
         }
     }
-    if (!found || psect_header->size == 0) {
-#ifdef ELF_C_DEBUG
-        sprint("[DEBUG]load_debug_line_section_header: No debug line section found.\n");
-#endif
-        return EL_ERR;
-    }
 
-    if (psect_header->size > sizeof(debug_line_buf)) {
-#ifdef ELF_C_DEBUG
-        sprint("[DEBUG]load_debug_line_section_header: Debug line section too large: %d bytes\n", psect_header->size);
-#endif
+    if (!found) return EL_ERR; // Not found
 
-        return EL_ENOMEM;
-    }
-
-    if (elf_fpread(ctx, debug_line_buf, psect_header->size, psect_header->offset) != psect_header->size) {
-#ifdef ELF_C_DEBUG
-        sprint("[DEBUG]load_debug_line_section_header: Fail to read debug line section content.\n");
-#endif
+    // 4. Load .debug_line content (overwriting shstrtab)
+    if (psect_header->size > sizeof(debug_line_buf)) return EL_ENOMEM;
+    if (elf_fpread(ctx, (void *)debug_line_buf, psect_header->size, psect_header->offset) != psect_header->size) {
         return EL_EIO;
     }
 
     // 读取.debug_line节内容
-    *pdebug_line = (char *)(psect_header->addr);
+    *pdebug_line = (char *)debug_line_buf;
     *plength = psect_header->size;
     return EL_OK;
 }
@@ -363,11 +371,7 @@ elf_status load_debug_line_section(elf_ctx *ctx, elf_sect_header sect_header) {
 
         return EL_ENOMEM;
     }
-    if (elf_fpread(ctx, debug_line_buf, sect_header.size, sect_header.offset) != sect_header.size) {
-#ifdef ELF_C_DEBUG
-        sprint("[DEBUG]load_debug_line_section: Fail to read debug line section content.\n");
-#endif
-
+    if (elf_fpread(ctx, (void *)debug_line_buf, sect_header.size, sect_header.offset) != sect_header.size) {
         return EL_EIO;
     }
     return EL_OK;
@@ -407,21 +411,18 @@ void load_bincode_from_host_elf(process *p) {
     elf_sect_header debug_line_sect_header;
     elf_status debug_line_status = load_debug_line_section_header(&elfloader, &p->debugline, &debug_line_length, &debug_line_sect_header);
     if (debug_line_status == EL_OK) {
-#ifdef ELF_C_DEBUG
-        sprint("[DEBUG]load_bincode_from_host_elf: Debug line section loaded, length: %d bytes\n", debug_line_length);
-#endif
         // load_debug_line_section(&elfloader, debug_line_sect_header);
         make_addr_line(&elfloader, p->debugline, debug_line_length);
-        int i = 0;
-        while (i < debug_line_length) {
-            // sprint("%d ", p->debugline[i]);
-            sprint("%d ", debug_line_buf[i]);
-            // if (p->debugline[i] == 0) sprint("\n");
-            if (debug_line_buf[i] == 0) sprint("\n");
-            if (debug_line_buf[i] != p->debugline[i]) sprint("???");
-            i++;
-        }
-        panic("111");
+        // int i = 0;
+        // while (i < debug_line_length) {
+        //     // sprint("%d ", p->debugline[i]);
+        //     sprint("%d ", debug_line_buf[i]);
+        //     // if (p->debugline[i] == 0) sprint("\n");
+        //     if (debug_line_buf[i] == 0) sprint("\n");
+        //     if (debug_line_buf[i] != p->debugline[i]) sprint("???");
+        //     i++;
+        // }
+        // panic("111");
     }
 
     // entry (virtual, also physical in lab1_x) address
