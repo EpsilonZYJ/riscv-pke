@@ -32,7 +32,6 @@ ssize_t sys_user_print(const char *buf, size_t n) {
 // implement the SYS_user_exit syscall
 //
 ssize_t sys_user_exit(uint64 code) {
-    // TODO: 统一取消内存关联映射
     // 先处理未被free的内存块
     if (current->mem_rib.alloc_list != NULL) {
         pd *alloc_item = current->mem_rib.alloc_list;
@@ -59,8 +58,9 @@ ssize_t sys_user_exit(uint64 code) {
             }
             pd *to_free = free_item;
             free_item = free_item->next;
+            uint64 user_va = pa_to_user_va((pagetable_t)current->pagetable, (uint64)to_free);
             // 取消映射并释放物理页
-            user_vm_unmap((pagetable_t)current->pagetable, (uint64)to_free, PGSIZE, 1);
+            user_vm_unmap((pagetable_t)current->pagetable, user_va, PGSIZE, 1);
             current->mem_rib.free_list = free_item;
         }
     }
@@ -78,6 +78,7 @@ uint64 sys_user_allocate_page(int n) {
     if (n <= 0 || n > PGSIZE) {
         return (uint64)NULL;
     }
+    n = ROUNDUP(n, 8); // 8-byte aligned
     uint64 va = current->mem_rib.alloc(n, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
     if (va == (uint64)NULL) {
         void *pa = alloc_page();
@@ -101,7 +102,7 @@ uint64 sys_user_allocate_page(int n) {
         va = pa_to_user_va((pagetable_t)current->pagetable, (uint64)pa);
         return va;
     } else {
-        return va;
+        return pa_to_user_va((pagetable_t)current->pagetable, va);
     }
 }
 
@@ -110,7 +111,8 @@ uint64 sys_user_allocate_page(int n) {
 //
 uint64 sys_user_free_page(uint64 va) {
     // user_vm_unmap((pagetable_t)current->pagetable, va, PGSIZE, 1);
-    current->mem_rib.free(va, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
+    uint64 pa = (uint64)user_va_to_pa((pagetable_t)current->pagetable, (void *)va);
+    current->mem_rib.free(pa, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
     return 0;
 }
 
