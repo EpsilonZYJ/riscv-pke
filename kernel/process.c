@@ -26,7 +26,8 @@ extern void return_to_user(trapframe *, uint64 satp);
 process *current = NULL;
 
 // points to the first free page in our simple heap. added @lab2_2
-uint64 g_ufree_page = USER_FREE_ADDRESS_START;
+// points to the first free page in our simple heap. added @lab2_2
+// uint64 g_ufree_page = USER_FREE_ADDRESS_START;
 
 //
 // switch to a user-mode process
@@ -180,6 +181,8 @@ uint64 first_fit_alloc(uint64 size, pd **p_free_list, pd **p_alloc_list) {
         return (uint64)NULL;
     }
     pd *alloc_item = *p_free_list;
+    pd *prev = NULL;
+
     while (alloc_item) {
         if (alloc_item->size == size + sizeof(pd)) {
             // 刚好合适
@@ -187,7 +190,11 @@ uint64 first_fit_alloc(uint64 size, pd **p_free_list, pd **p_alloc_list) {
             alloc_item->size = 0;
 
             // 从空闲链表中移除
-            sort_pd_list_ascend(p_free_list, &alloc_item, pd_first_fit_cmp);
+            if (prev) {
+                prev->next = alloc_item->next;
+            } else {
+                *p_free_list = alloc_item->next;
+            }
 
             // 加入已分配链表
             alloc_item->next = *p_alloc_list;
@@ -198,34 +205,41 @@ uint64 first_fit_alloc(uint64 size, pd **p_free_list, pd **p_alloc_list) {
             return (uint64)alloc_item + sizeof(pd);
         } else if (alloc_item->size < size + sizeof(pd)) {
             // 空闲块太小，继续找下一个
+            prev = alloc_item;
             alloc_item = alloc_item->next;
         } else {
-            // 找到合适的空闲块，进行分割，因为块大小可以放分配区+2个pd头，因此数据不会重叠
+            // 找到合适的空闲块，进行分割
+            // 从块的头部（起始位置）进行分配
+
             uint64 total_free_size = alloc_item->size;
-            uint64 origin_next = (uint64)(alloc_item->next);
+            pd *next_free_node = alloc_item->next;
 
-            uint64 alloc_addr = (uint64)(alloc_item) + alloc_item->size - size - sizeof(pd);
-            pd *new_free_item = (pd *)(alloc_item);
+            // 分配的块就是 alloc_item 本身
+            pd *alloc_pd = alloc_item;
+            // 新的空闲块在已分配部分之后开始
+            uint64 new_free_addr = (uint64)alloc_item + sizeof(pd) + size;
+            pd *new_free_item = (pd *)new_free_addr;
 
-            // 更新空闲块信息
-            new_free_item->size = total_free_size - size - sizeof(pd);
+            // 设置新的空闲块
             new_free_item->flag = 0;
-            new_free_item->next = (pd *)origin_next;
-            // 更新分配块信息
-            pd *alloc_pd = (pd *)alloc_addr;
-            alloc_pd->flag = 1;
-            alloc_pd->size = 0;
+            new_free_item->size = total_free_size - size - sizeof(pd);
+            new_free_item->next = next_free_node;
 
-            // 将分配块加入已分配链表
+            // 更新空闲链表
+            if (prev) {
+                prev->next = new_free_item;
+            } else {
+                *p_free_list = new_free_item;
+            }
+
+            // 设置已分配块
+            alloc_pd->flag = 1;
+            alloc_pd->size = size;
+
+            // 添加到已分配链表
             alloc_pd->next = *p_alloc_list;
             *p_alloc_list = alloc_pd;
 
-            // 重新排序空闲链表
-            sort_pd_list_ascend(p_free_list, &new_free_item, pd_first_fit_cmp);
-
-            // 在分配队列头部记录大小信息，便于释放时使用
-            alloc_pd->size = size;
-            // 返回分配块地址
             return (uint64)alloc_pd + sizeof(pd);
         }
     }

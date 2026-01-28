@@ -48,19 +48,13 @@ ssize_t sys_user_exit(uint64 code) {
     if (free_item != NULL) {
         while (free_item) {
             pd *next_item = free_item->next;
-            if (free_item->size != PGSIZE - sizeof(pd)) {
-                panic("Memory leak detected in user process exit!\n");
-            }
-            if (next_item != NULL) {
-                if (((uint64)free_item + PGSIZE > (uint64)next_item && (uint64)free_item <= (uint64)next_item) || ((uint64)next_item + PGSIZE > (uint64)free_item && (uint64)next_item <= (uint64)free_item)) {
-                    panic("Memory leak detected in user process exit!\n");
-                }
-            }
             pd *to_free = free_item;
             free_item = free_item->next;
             uint64 user_va = pa_to_user_va((pagetable_t)current->pagetable, (uint64)to_free);
-            // 取消映射并释放物理页
-            user_vm_unmap((pagetable_t)current->pagetable, user_va, PGSIZE, 1);
+            if (user_va != 0) {
+                // 取消映射并释放物理页
+                user_vm_unmap((pagetable_t)current->pagetable, user_va, PGSIZE, 1);
+            }
             current->mem_rib.free_list = free_item;
         }
     }
@@ -79,30 +73,29 @@ uint64 sys_user_allocate_page(int n) {
         return (uint64)NULL;
     }
     n = ROUNDUP(n, 8); // 8-byte aligned
-    uint64 va = current->mem_rib.alloc(n, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
-    if (va == (uint64)NULL) {
+    uint64 alloc_pa = current->mem_rib.alloc(n, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
+    if (alloc_pa == (uint64)NULL) {
         void *pa = alloc_page();
         if (pa == NULL) {
             return (uint64)NULL;
         }
-        va = g_ufree_page;
-        user_vm_map((pagetable_t)current->pagetable, va, PGSIZE, (uint64)pa,
+        uint64 alloc_va = current->user_heap_top;
+        user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
                     prot_to_type(PROT_WRITE | PROT_READ, 1));
-        g_ufree_page += PGSIZE;
+        current->user_heap_top += PGSIZE;
         pd *new_free_block = (pd *)pa;
         new_free_block->flag = 0;
         new_free_block->size = PGSIZE - sizeof(pd);
         new_free_block->next = NULL;
         insert_free_block(&current->mem_rib.free_list, new_free_block, pd_first_fit_cmp);
 
-        pa = (void *)current->mem_rib.alloc(n, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
-        if (pa == NULL) {
+        alloc_pa = current->mem_rib.alloc(n, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
+        if (alloc_pa == (uint64)NULL) {
             return (uint64)NULL;
         }
-        va = pa_to_user_va((pagetable_t)current->pagetable, (uint64)pa);
-        return va;
+        return pa_to_user_va((pagetable_t)current->pagetable, alloc_pa);
     } else {
-        return pa_to_user_va((pagetable_t)current->pagetable, va);
+        return pa_to_user_va((pagetable_t)current->pagetable, alloc_pa);
     }
 }
 

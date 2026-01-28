@@ -41,6 +41,7 @@ void load_user_program(process *proc) {
     proc->mem_rib.free_list = NULL;
     proc->mem_rib.alloc = first_fit_alloc;
     proc->mem_rib.free = first_fit_free;
+    proc->user_heap_top = USER_FREE_ADDRESS_START;
 
     // allocate a page to store the trapframe. alloc_page is defined in kernel/pmm.c. added @lab2_1
     proc->trapframe = (trapframe *)alloc_page();

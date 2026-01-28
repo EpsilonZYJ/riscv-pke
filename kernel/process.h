@@ -40,6 +40,7 @@ typedef struct process_t {
     // trapframe storing the context of a (User mode) process.
     trapframe *trapframe;
     m_rib mem_rib; // 内存管理信息
+    uint64 user_heap_top; // 堆顶，以字节为单位，added @lab2_challenge2
 } process;
 
 // switch to run user app
@@ -49,7 +50,9 @@ void switch_to(process *);
 extern process *current;
 
 // address of the first free page in our simple heap. added @lab2_2
-extern uint64 g_ufree_page;
+// address of the first free page in our simple heap. added @lab2_2
+// // address of the first free page in our simple heap. added @lab2_2
+// extern uint64 g_ufree_page;
 
 int pd_first_fit_cmp(pd *a, pd *b);
 void sort_pd_list_ascend(pd **plist_head, pd **changed_item, int (*ascend_cmp)(pd *, pd *));

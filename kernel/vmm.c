@@ -10,6 +10,7 @@
 #include "util/string.h"
 #include "spike_interface/spike_utils.h"
 #include "util/functions.h"
+#include "process.h"
 
 /* --- utility functions for virtual address mapping --- */
 //
@@ -205,10 +206,12 @@ void user_vm_unmap(pagetable_t page_dir, uint64 va, uint64 size, int free) {
 }
 
 uint64 pa_to_user_va(pagetable_t page_dir, uint64 pa) {
-    for (uint64 va = 0; va < MAXVA; va += PGSIZE) {
-        uint64 t_pa = lookup_pa(page_dir, va);
-        if (t_pa == pa) {
-            return va;
+    uint64 map_pa;
+    for (uint64 va = USER_FREE_ADDRESS_START; va < current->user_heap_top; va += PGSIZE) {
+        map_pa = lookup_pa(page_dir, va);
+        if (map_pa == 0) continue;
+        if (pa >= map_pa && pa < map_pa + PGSIZE) {
+            return va + (pa - map_pa);
         }
     }
     return (uint64)NULL;
