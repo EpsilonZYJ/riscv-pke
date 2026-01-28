@@ -203,3 +203,13 @@ void user_vm_unmap(pagetable_t page_dir, uint64 va, uint64 size, int free) {
         *pte = 0;
     }
 }
+
+uint64 pa_to_user_va(pagetable_t page_dir, uint64 pa) {
+    for (uint64 va = 0; va < MAXVA; va += PGSIZE) {
+        uint64 t_pa = lookup_pa(page_dir, va);
+        if (t_pa == pa) {
+            return va;
+        }
+    }
+    return (uint64)NULL;
+}

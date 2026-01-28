@@ -88,16 +88,17 @@ uint64 sys_user_allocate_page(int n) {
         user_vm_map((pagetable_t)current->pagetable, va, PGSIZE, (uint64)pa,
                     prot_to_type(PROT_WRITE | PROT_READ, 1));
         g_ufree_page += PGSIZE;
-        pd *new_free_block = (pd *)va;
+        pd *new_free_block = (pd *)pa;
         new_free_block->flag = 0;
         new_free_block->size = PGSIZE - sizeof(pd);
         new_free_block->next = NULL;
         insert_free_block(&current->mem_rib.free_list, new_free_block, pd_first_fit_cmp);
 
-        va = current->mem_rib.alloc(n, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
-        if (va == (uint64)NULL) {
+        pa = (void *)current->mem_rib.alloc(n, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
+        if (pa == NULL) {
             return (uint64)NULL;
         }
+        va = pa_to_user_va((pagetable_t)current->pagetable, (uint64)pa);
         return va;
     } else {
         return va;
