@@ -26,6 +26,8 @@ typedef struct process_t {
     pagetable_t pagetable;
     // trapframe storing the context of a (User mode) process.
     trapframe *trapframe;
+    // 堆栈指针
+    uint64 ufree_page;
 } process;
 
 // switch to run user app
@@ -35,6 +37,6 @@ void switch_to(process *);
 extern process *current[NCPU];
 
 // address of the first free page in our simple heap. added @lab2_2
-extern uint64 g_ufree_page;
+// extern uint64 g_ufree_page;
 
 #endif

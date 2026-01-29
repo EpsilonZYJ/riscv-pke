@@ -6,10 +6,12 @@
 // Initialize phisical memeory manager
 void pmm_init();
 // Allocate a free phisical page
-void* alloc_page();
+void *alloc_page();
 // Free an allocated page
-void free_page(void* pa);
+void free_page(void *pa);
 
 extern int vm_alloc_stage[NCPU];
+
+extern volatile int vm_alloc_lock;
 
 #endif

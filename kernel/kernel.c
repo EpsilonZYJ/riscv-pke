@@ -9,6 +9,7 @@
 #include "pmm.h"
 #include "vmm.h"
 #include "memlayout.h"
+#include "sync_utils.h"
 #include "spike_interface/spike_utils.h"
 
 // process is a structure defined in kernel/process.h
@@ -19,6 +20,8 @@ process user_app[NCPU];
 // S-mode trap vector). added @lab2_1
 //
 extern char trap_sec_start[];
+
+static volatile int s_counter = 0;
 
 //
 // turn on paging. added @lab2_1
@@ -39,7 +42,6 @@ void load_user_program(process *proc) {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
     sprint("User application is loading.\n");
-    // FIXME: 修复虚拟页表的问题
     // allocate a page to store the trapframe. alloc_page is defined in kernel/pmm.c. added @lab2_1
     proc->trapframe = (trapframe *)alloc_page();
     memset(proc->trapframe, 0, sizeof(trapframe));
@@ -55,8 +57,10 @@ void load_user_program(process *proc) {
     // USER_STACK_TOP = 0x7ffff000, defined in kernel/memlayout.h
     proc->trapframe->regs.sp = USER_STACK_TOP; // virtual address of user stack top
 
-    sprint("hartid = ?: user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n", proc->trapframe,
+    sprint("hartid = %d: user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n", hartid, proc->trapframe,
            proc->trapframe->regs.sp, proc->kstack);
+
+    proc->trapframe->regs.tp = hartid;
 
     // load_bincode_from_host_elf() is defined in kernel/elf.c
     load_bincode_from_host_elf(proc);
@@ -84,16 +88,22 @@ int s_start(void) {
     assert(hartid < NCPU);
 
     sprint("hartid = %d: Enter supervisor mode...\n", hartid);
+
     // in the beginning, we use Bare mode (direct) memory mapping as in lab1.
     // but now, we are going to switch to the paging mode @lab2_1.
     // note, the code still works in Bare mode when calling pmm_init() and kern_vm_init().
     write_csr(satp, 0);
 
-    // init phisical memory manager
-    pmm_init();
+    if (hartid == 0) {
+        // init phisical memory manager
+        pmm_init();
 
-    // build the kernel page table
-    kern_vm_init();
+        // build the kernel page table
+        kern_vm_init();
+    }
+
+    // wait for other harts to finish pmm_init() and kern_vm_init()
+    sync_barrier(&s_counter, NCPU);
 
     // now, switch to paging mode by turning on paging (SV39)
     enable_paging();
@@ -105,10 +115,10 @@ int s_start(void) {
 
     sprint("hartid = %d: Switch to user mode...\n", hartid);
 
-    // FIXME: 目前只能在 hartid = 0 的情况下运行
-    uint64 hartid0 = 0;
+    spin_lock(&vm_alloc_lock);
+    vm_alloc_stage[hartid] = 1;
+    spin_unlock(&vm_alloc_lock);
 
-    vm_alloc_stage[hartid0] = 1;
     // switch_to() is defined in kernel/process.c
     switch_to(&user_app[hartid]);
 

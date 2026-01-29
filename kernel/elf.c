@@ -126,7 +126,7 @@ void load_bincode_from_host_elf(process *p) {
     uint64 hartid = read_tp();
 
     if (hartid >= argc || hartid >= NCPU) panic("hartid %d exceeds the number of input application programs %d.\n", hartid, argc);
-    sprint("hartid = %d: Application: %s\n", hartid, arg_bug_msg.argv[0]);
+    sprint("hartid = %d: Application: %s\n", hartid, arg_bug_msg.argv[hartid]);
 
     // elf loading. elf_ctx is defined in kernel/elf.h, used to track the loading process.
     elf_ctx elfloader;

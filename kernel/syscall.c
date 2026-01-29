@@ -58,11 +58,11 @@ uint64 sys_user_allocate_page() {
     assert(hartid < NCPU);
     assert(current[hartid]);
     void *pa = alloc_page();
-    uint64 va = g_ufree_page;
-    g_ufree_page += PGSIZE;
+    uint64 va = current[hartid]->ufree_page;
+    current[hartid]->ufree_page += PGSIZE;
     user_vm_map((pagetable_t)current[hartid]->pagetable, va, PGSIZE, (uint64)pa,
                 prot_to_type(PROT_WRITE | PROT_READ, 1));
-    sprint("hartid = ?: vaddr 0x%x is mapped to paddr 0x%x\n", va, pa);
+    sprint("hartid = %d: vaddr 0x%x is mapped to paddr 0x%x\n", hartid, va, pa);
     return va;
 }
 

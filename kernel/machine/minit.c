@@ -105,6 +105,8 @@ void m_start(uintptr_t hartid, uintptr_t dtb) {
         init_dtb(dtb);
     }
 
+    sprint("%d\n", hartid);
+
     sync_barrier(&m_counter, NCPU);
 
     if (hartid != 0) {
