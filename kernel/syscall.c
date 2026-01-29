@@ -15,11 +15,13 @@
 #include "sched.h"
 
 #include "spike_interface/spike_utils.h"
+#include "kernel/semaphore.h"
+#include "semaphore.h"
 
 //
 // implement the SYS_user_print syscall
 //
-ssize_t sys_user_print(const char *buf, size_t n) {
+size_t sys_user_print(const char *buf, size_t n) {
     // buf is now an address in user space of the given app's user stack,
     // so we have to transfer it into phisical address (kernel is running in direct mapping).
     assert(current);
@@ -96,6 +98,50 @@ ssize_t sys_user_yield() {
     return 0;
 }
 
+/**
+ * @brief 创建一个新的信号量
+ * @param initval 信号量的初始值
+ * @return 信号量的id，失败返回-1
+ */
+ssize_t sys_user_sem_new(int initval) {
+    semaphore *sem = alloc_semaphore();
+    if (sem == NULL) {
+        return -1;
+    }
+    sem->value = initval;
+    return sem->sem_id;
+}
+
+/**
+ * @brief P操作信号量
+ * @param semid 信号量的id
+ * @return 成功返回0，失败返回-1
+ */
+ssize_t sys_user_sem_P(int semid) {
+    semaphore *sem = get_semaphore(semid);
+    if (sem == NULL) {
+        return -1;
+    } else {
+        semaphore_P(sem);
+        return 0;
+    }
+}
+
+/**
+ * @brief V操作信号量
+ * @param semid 信号量的id
+ * @return 成功返回0，失败返回-1
+ */
+ssize_t sys_user_sem_V(int semid) {
+    semaphore *sem = get_semaphore(semid);
+    if (sem == NULL) {
+        return -1;
+    } else {
+        semaphore_V(sem);
+        return 0;
+    }
+}
+
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
 // returns the code of success, (e.g., 0 means success, fail for otherwise)
@@ -115,6 +161,12 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
         return sys_user_fork();
     case SYS_user_yield:
         return sys_user_yield();
+    case SYS_user_sem_new:
+        return sys_user_sem_new(a1);
+    case SYS_user_sem_P:
+        return sys_user_sem_P(a1);
+    case SYS_user_sem_V:
+        return sys_user_sem_V(a1);
     default:
         panic("Unknown syscall %ld \n", a0);
     }
