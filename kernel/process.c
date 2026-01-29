@@ -46,7 +46,7 @@ void switch_to(process *proc) {
     proc->trapframe->kernel_sp = proc->kstack;     // process's kernel stack
     proc->trapframe->kernel_satp = read_csr(satp); // kernel page table
     proc->trapframe->kernel_trap = (uint64)smode_trap_handler;
-    proc->ufree_page = USER_FREE_ADDRESS_START;
+    // proc->ufree_page = USER_FREE_ADDRESS_START;
 
     // SSTATUS_SPP and SSTATUS_SPIE are defined in kernel/riscv.h
     // set S Previous Privilege mode (the SSTATUS_SPP bit in sstatus register) to User mode.

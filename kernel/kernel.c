@@ -62,6 +62,8 @@ void load_user_program(process *proc) {
 
     proc->trapframe->regs.tp = hartid;
 
+    proc->ufree_page = USER_FREE_ADDRESS_START;
+
     // load_bincode_from_host_elf() is defined in kernel/elf.c
     load_bincode_from_host_elf(proc);
 

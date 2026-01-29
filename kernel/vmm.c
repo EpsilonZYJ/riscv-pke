@@ -188,7 +188,7 @@ void user_vm_unmap(pagetable_t page_dir, uint64 va, uint64 size, int free) {
     // as naive_free reclaims only one page at a time, you only need to consider one page
     // to make user/app_naive_malloc to behave correctly.
     pte_t *pte;
-    if ((va & PGSIZE) != 0) panic("uvmunmap: not aligned");
+    if ((va % PGSIZE) != 0) panic("uvmunmap: not aligned");
     for (uint64 a = va; a < va + size; a += PGSIZE) {
         if ((pte = page_walk(page_dir, a, 0)) == 0)
             panic("uvmunmap: walk");
