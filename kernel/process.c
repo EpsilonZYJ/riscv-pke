@@ -208,10 +208,17 @@ int do_fork(process *parent) {
                 if (free_block_filter[(heap_block - heap_bottom) / PGSIZE]) // skip free blocks
                     continue;
 
-                void *child_pa = alloc_page();
-                memcpy(child_pa, (void *)lookup_pa(parent->pagetable, heap_block), PGSIZE);
-                user_vm_map((pagetable_t)child->pagetable, heap_block, PGSIZE, (uint64)child_pa,
-                            prot_to_type(PROT_WRITE | PROT_READ, 1));
+                uint64 parent_pa = lookup_pa(parent->pagetable, heap_block);
+                inc_page_ref((void *)parent_pa);
+                user_vm_map((pagetable_t)child->pagetable, heap_block, PGSIZE, (uint64)parent_pa,
+                            (prot_to_type(PROT_READ, 1) & ~PTE_W) | PTE_COW);
+
+                // 将父进程的页表项设置为只读
+                pte_t *parent_pte = page_walk(parent->pagetable, heap_block, 0);
+                if (parent_pte && (*parent_pte & PTE_V)) {
+                    *parent_pte &= (*parent_pte & ~PTE_W) | PTE_COW; // 将父进程的页表项设置为只读
+                    flush_tlb();
+                }
             }
 
             child->mapped_info[HEAP_SEGMENT].npages = parent->mapped_info[HEAP_SEGMENT].npages;
