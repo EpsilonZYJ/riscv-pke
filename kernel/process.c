@@ -191,32 +191,18 @@ int do_fork(process *parent) {
                    (void *)lookup_pa(parent->pagetable, parent->mapped_info[i].va), PGSIZE);
             break;
         case HEAP_SEGMENT: { // build a same heap for child process.
-
-            // convert free_pages_address into a filter to skip reclaimed blocks in the heap
-            // when mapping the heap blocks
-            int free_block_filter[MAX_HEAP_PAGES];
-            memset(free_block_filter, 0, MAX_HEAP_PAGES);
-            uint64 heap_bottom = parent->user_heap.heap_bottom;
-            for (int i = 0; i < parent->user_heap.free_pages_count; i++) {
-                int index = (parent->user_heap.free_pages_address[i] - heap_bottom) / PGSIZE;
-                free_block_filter[index] = 1;
-            }
-
             // copy and map the heap blocks
             for (uint64 heap_block = current->user_heap.heap_bottom;
                  heap_block < current->user_heap.heap_top; heap_block += PGSIZE) {
-                if (free_block_filter[(heap_block - heap_bottom) / PGSIZE]) // skip free blocks
-                    continue;
-
-                uint64 parent_pa = lookup_pa(parent->pagetable, heap_block);
-                inc_page_ref((void *)parent_pa);
-                user_vm_map((pagetable_t)child->pagetable, heap_block, PGSIZE, (uint64)parent_pa,
-                            (prot_to_type(PROT_READ, 1) & ~PTE_W) | PTE_COW);
-
-                // 将父进程的页表项设置为只读
-                pte_t *parent_pte = page_walk(parent->pagetable, heap_block, 0);
-                if (parent_pte && (*parent_pte & PTE_V)) {
-                    *parent_pte &= (*parent_pte & ~PTE_W) | PTE_COW; // 将父进程的页表项设置为只读
+                pte_t *pte = page_walk(parent->pagetable, heap_block, 0);
+                if (pte && (*pte & PTE_V)) {
+                    uint64 pa = PTE2PA(*pte);
+                    inc_page_ref((void *)pa);
+                    uint64 flags = PTE_FLAGS(*pte);
+                    flags &= ~PTE_W;  // clear the writable bit
+                    flags |= PTE_COW; // set the copy-on-write bit
+                    user_vm_map(child->pagetable, heap_block, PGSIZE, pa, flags | PTE_V);
+                    *pte = PA2PTE(pa) | flags | PTE_V; // update the parent's pte to be copy-on-write as well
                     flush_tlb();
                 }
             }
