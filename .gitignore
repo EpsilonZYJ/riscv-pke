@@ -11,3 +11,5 @@ obj/
 .vscode/
 pke_out.txt
 .idea/
+app_exec
+app_ls
