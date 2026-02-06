@@ -149,11 +149,11 @@ process *alloc_process() {
     procs[i].mapped_info[HEAP_SEGMENT].npages = 0; // no pages are mapped to heap yet.
     procs[i].mapped_info[HEAP_SEGMENT].seg_type = HEAP_SEGMENT;
 
-  procs[i].total_mapped_region = 4;
+    procs[i].total_mapped_region = 4;
 
-  // initialize files_struct
-  procs[i].pfiles = init_proc_file_management();
-  sprint("in alloc_proc. build proc_file_management successfully.\n");
+    // initialize files_struct
+    procs[i].pfiles = init_proc_file_management();
+    sprint("in alloc_proc. build proc_file_management successfully.\n");
 
     // return after initialization.
     return &procs[i];
@@ -249,6 +249,21 @@ int do_fork(process *parent) {
             child->mapped_info[child->total_mapped_region].seg_type = CODE_SEGMENT;
             child->total_mapped_region++;
             break;
+        case DATA_SEGMENT:
+            for (int j = 0; j < parent->mapped_info[i].npages; j++) {
+                void *child_pa = alloc_page();
+                uint64 parent_va = parent->mapped_info[i].va + j * PGSIZE;
+                void *parent_pa = (void *)lookup_pa(parent->pagetable, parent_va);
+                memcpy(child_pa, parent_pa, PGSIZE);
+                user_vm_map((pagetable_t)child->pagetable, parent_va, PGSIZE, (uint64)child_pa,
+                            prot_to_type(PROT_WRITE | PROT_READ, 1));
+            }
+
+            child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
+            child->mapped_info[child->total_mapped_region].npages = parent->mapped_info[i].npages;
+            child->mapped_info[child->total_mapped_region].seg_type = DATA_SEGMENT;
+            child->total_mapped_region++;
+            break;
         }
     }
 
@@ -258,4 +273,86 @@ int do_fork(process *parent) {
     insert_to_ready_queue(child);
 
     return child->pid;
+}
+
+int do_wait(int64 pid) {
+    int has_child = 0;
+    if (pid > 0) {
+        if (pid >= NPROC || procs[pid].parent != current) {
+            // pid大于0但不是当前子进程或不合法
+            return -1;
+        } else {
+            has_child = 1;
+        }
+    } else if (pid == -1) {
+        // pid为-1时
+        for (int i = 0; i < NPROC; i++) {
+            if (procs[i].parent == current && procs[i].status != FREE) {
+                has_child = 1;
+                if (procs[i].status == ZOMBIE) {
+                    // 已结束
+                    procs[i].status = FREE;
+                    return procs[i].pid;
+                }
+                break;
+            }
+        }
+    }
+
+    if (!has_child) {
+        return -1; // 没有子进程
+    }
+
+    current->status = BLOCKED;
+    insert_to_block_queue(current);
+
+    schedule();
+    return -1; // 不会执行到这里
+}
+
+process *block_queue_head = NULL;
+
+void insert_to_block_queue(process *proc) {
+    if (block_queue_head == NULL) {
+        proc->status = BLOCKED;
+        proc->queue_next = NULL;
+        block_queue_head = proc;
+        return;
+    }
+
+    process *p;
+    // browse the block queue to see if proc is already in-queue
+    for (p = block_queue_head; p->queue_next != NULL; p = p->queue_next)
+        if (p == proc) return; // already in queue
+
+    // p points to the last element of the block queue
+    if (p == proc) return;
+    p->queue_next = proc;
+    proc->status = BLOCKED;
+    proc->queue_next = NULL;
+
+    return;
+}
+
+process *wake_from_block_queue(process *child_process) {
+    process *prev = NULL;
+    process *p = block_queue_head;
+
+    while (p != NULL) {
+        if (child_process == NULL || p->pid == child_process->parent->pid) {
+            // found
+            if (prev == NULL) {
+                // head element
+                block_queue_head = p->queue_next;
+            } else {
+                prev->queue_next = p->queue_next;
+            }
+            p->queue_next = NULL;
+            return p;
+        }
+        prev = p;
+        p = p->queue_next;
+    }
+
+    return NULL; // not found
 }
