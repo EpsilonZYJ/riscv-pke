@@ -35,4 +35,6 @@ int unlink_u(const char *fn);
 
 int wait(int pid);
 
+int exec(char *command, char *para);
+
 #endif

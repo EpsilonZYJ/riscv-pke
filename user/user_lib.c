@@ -174,3 +174,10 @@ int close(int fd) {
 int wait(int pid) {
     return do_user_call(SYS_user_wait, pid, 0, 0, 0, 0, 0, 0);
 }
+
+//
+// lib call to exec
+//
+int exec(char *command, char *exec) {
+    return do_user_call(SYS_user_exec, (uint64)command, (uint64)exec, 0, 0, 0, 0, 0);
+}
