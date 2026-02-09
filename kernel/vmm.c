@@ -188,7 +188,7 @@ void user_vm_unmap(pagetable_t page_dir, uint64 va, uint64 size, int free) {
     // as naive_free reclaims only one page at a time, you only need to consider one page
     // to make user/app_naive_malloc to behave correctly.
     pte_t *pte;
-    if ((va & PGSIZE) != 0) panic("uvmunmap: not aligned");
+    if ((va % PGSIZE) != 0) panic("uvmunmap: not aligned");
     for (uint64 a = va; a < va + size; a += PGSIZE) {
         if ((pte = page_walk(page_dir, a, 0)) == 0)
             panic("uvmunmap: walk");
@@ -207,17 +207,17 @@ void user_vm_unmap(pagetable_t page_dir, uint64 va, uint64 size, int free) {
 //
 // debug function, print the vm space of a process. added @lab3_1
 //
-void print_proc_vmspace(process* proc) {
-  sprint( "======\tbelow is the vm space of process%d\t========\n", proc->pid );
-  for( int i=0; i<proc->total_mapped_region; i++ ){
-    sprint( "-va:%lx, npage:%d, ", proc->mapped_info[i].va, proc->mapped_info[i].npages);
-    switch(proc->mapped_info[i].seg_type){
-      case CODE_SEGMENT: sprint( "type: CODE SEGMENT" ); break;
-      case DATA_SEGMENT: sprint( "type: DATA SEGMENT" ); break;
-      case STACK_SEGMENT: sprint( "type: STACK SEGMENT" ); break;
-      case CONTEXT_SEGMENT: sprint( "type: TRAPFRAME SEGMENT" ); break;
-      case SYSTEM_SEGMENT: sprint( "type: USER KERNEL STACK SEGMENT" ); break;
+void print_proc_vmspace(process *proc) {
+    sprint("======\tbelow is the vm space of process%d\t========\n", proc->pid);
+    for (int i = 0; i < proc->total_mapped_region; i++) {
+        sprint("-va:%lx, npage:%d, ", proc->mapped_info[i].va, proc->mapped_info[i].npages);
+        switch (proc->mapped_info[i].seg_type) {
+        case CODE_SEGMENT: sprint("type: CODE SEGMENT"); break;
+        case DATA_SEGMENT: sprint("type: DATA SEGMENT"); break;
+        case STACK_SEGMENT: sprint("type: STACK SEGMENT"); break;
+        case CONTEXT_SEGMENT: sprint("type: TRAPFRAME SEGMENT"); break;
+        case SYSTEM_SEGMENT: sprint("type: USER KERNEL STACK SEGMENT"); break;
+        }
+        sprint(", mapped to pa:%lx\n", lookup_pa(proc->pagetable, proc->mapped_info[i].va));
     }
-    sprint( ", mapped to pa:%lx\n", lookup_pa(proc->pagetable, proc->mapped_info[i].va) );
-  }
 }

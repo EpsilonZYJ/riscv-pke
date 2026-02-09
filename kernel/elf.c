@@ -4,6 +4,8 @@
  */
 
 #include "elf.h"
+
+#include "memlayout.h"
 #include "string.h"
 #include "riscv.h"
 #include "vmm.h"
@@ -139,8 +141,41 @@ void load_bincode_from_host_elf(process *p, char *filename) {
 }
 
 ssize_t do_exec(char *command, char *para) {
-    process *proc;
-    proc = alloc_process();
+    for (int i = 0; i < current->total_mapped_region; i++) {
+        int type = current->mapped_info[i].seg_type;
+        if (type == CODE_SEGMENT || type == DATA_SEGMENT || type == STACK_SEGMENT || type == HEAP_SEGMENT) {
+            if (current->mapped_info[i].npages > 0) {
+                user_vm_unmap(current->pagetable, current->mapped_info[i].va, current->mapped_info[i].npages * PGSIZE, 1);
+                current->mapped_info[i].npages = 0;
+                current->mapped_info->va = 0;
+            }
+        }
+    }
 
-    return -1;
+    current->user_heap.heap_top = USER_FREE_ADDRESS_START;
+    current->user_heap.heap_bottom = USER_FREE_ADDRESS_START;
+    current->user_heap.free_pages_count = 0;
+
+    void *new_stack_page = alloc_page();
+    user_vm_map(current->pagetable, USER_STACK_TOP - PGSIZE, PGSIZE, (uint64)new_stack_page, prot_to_type(PROT_READ | PROT_WRITE, 1));
+    current->mapped_info[STACK_SEGMENT].va = USER_STACK_TOP - PGSIZE;
+    current->mapped_info[STACK_SEGMENT].npages = 1;
+    current->mapped_info[STACK_SEGMENT].seg_type = STACK_SEGMENT;
+    load_bincode_from_host_elf(current, command);
+    uint64 sp = USER_STACK_TOP;
+
+    int para_len = strlen(para) + 1;
+    uint64 argv_array_addr = sp - 16;
+    uint64 arg_string_addr = argv_array_addr - ((para_len + 7) & (~7));
+    char *arg_str_pa = (char *)user_va_to_pa((pagetable_t)current->pagetable, (void *)arg_string_addr);
+    strcpy(arg_str_pa, para);
+
+    uint64 *argv_pa = (uint64 *)user_va_to_pa((pagetable_t)current->pagetable, (void *)argv_array_addr);
+    argv_pa[0] = arg_string_addr;
+    argv_pa[1] = 0;
+
+    current->trapframe->regs.a0 = 1;
+    current->trapframe->regs.a1 = argv_array_addr;
+
+    return 1;
 }
