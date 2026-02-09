@@ -12,6 +12,7 @@
 #include "pmm.h"
 #include "vfs.h"
 #include "spike_interface/spike_utils.h"
+#include "util/functions.h"
 
 typedef struct elf_info_t {
     struct file *f;
@@ -141,16 +142,36 @@ void load_bincode_from_host_elf(process *p, char *filename) {
 }
 
 ssize_t do_exec(char *command, char *para) {
+    char k_command[MAX_PATH_LEN];
+    char k_para[MAX_PATH_LEN];
+
+    if (command)
+        strcpy(k_command, command);
+    else
+        k_command[0] = '\0';
+
+    if (para)
+        strcpy(k_para, para);
+    else
+        k_para[0] = '\0';
+
+    // 释放当前进程的用户空间映射，重新加载新的应用程序
     for (int i = 0; i < current->total_mapped_region; i++) {
         int type = current->mapped_info[i].seg_type;
         if (type == CODE_SEGMENT || type == DATA_SEGMENT || type == STACK_SEGMENT || type == HEAP_SEGMENT) {
             if (current->mapped_info[i].npages > 0) {
-                user_vm_unmap(current->pagetable, current->mapped_info[i].va, current->mapped_info[i].npages * PGSIZE, 1);
+                const uint64 va = ROUNDDOWN(current->mapped_info[i].va, PGSIZE);
+                const uint64 size = current->mapped_info[i].npages * PGSIZE;
+                int free_flag = 1;
+                if (type == CODE_SEGMENT) free_flag = 0;
+                user_vm_unmap(current->pagetable, va, size, free_flag);
                 current->mapped_info[i].npages = 0;
-                current->mapped_info->va = 0;
+                current->mapped_info[i].va = 0;
+                current->mapped_info[i].seg_type = 0;
             }
         }
     }
+    flush_tlb();
 
     current->user_heap.heap_top = USER_FREE_ADDRESS_START;
     current->user_heap.heap_bottom = USER_FREE_ADDRESS_START;
@@ -161,21 +182,35 @@ ssize_t do_exec(char *command, char *para) {
     current->mapped_info[STACK_SEGMENT].va = USER_STACK_TOP - PGSIZE;
     current->mapped_info[STACK_SEGMENT].npages = 1;
     current->mapped_info[STACK_SEGMENT].seg_type = STACK_SEGMENT;
-    load_bincode_from_host_elf(current, command);
-    uint64 sp = USER_STACK_TOP;
+    load_bincode_from_host_elf(current, k_command);
 
-    int para_len = strlen(para) + 1;
-    uint64 argv_array_addr = sp - 16;
-    uint64 arg_string_addr = argv_array_addr - ((para_len + 7) & (~7));
-    char *arg_str_pa = (char *)user_va_to_pa((pagetable_t)current->pagetable, (void *)arg_string_addr);
-    strcpy(arg_str_pa, para);
+    if (strlen(k_para) > 0) {
+        uint64 sp = USER_STACK_TOP;
 
-    uint64 *argv_pa = (uint64 *)user_va_to_pa((pagetable_t)current->pagetable, (void *)argv_array_addr);
-    argv_pa[0] = arg_string_addr;
-    argv_pa[1] = 0;
+        int para_len = strlen(k_para) + 1;
+        uint64 arg_string_addr = (sp - ((para_len + 7) & ~0x7)); // align to 8 bytes
+        uint64 argv_array_addr = (arg_string_addr - 16) & ~0xF;
 
-    current->trapframe->regs.a0 = 1;
-    current->trapframe->regs.a1 = argv_array_addr;
+        if (arg_string_addr > USER_STACK_TOP - PGSIZE && arg_string_addr < USER_STACK_TOP && argv_array_addr > USER_STACK_TOP - PGSIZE && argv_array_addr < USER_STACK_TOP) {
+            char *arg_str_pa = (char *)user_va_to_pa((pagetable_t)current->pagetable, (void *)arg_string_addr);
+            uint64 *argv_pa = (uint64 *)user_va_to_pa((pagetable_t)current->pagetable, (void *)argv_array_addr);
+            if (arg_str_pa != NULL && argv_pa != NULL) {
+                strcpy(arg_str_pa, k_para);
 
-    return 1;
+                argv_pa[0] = arg_string_addr;
+                argv_pa[1] = 0;
+
+                current->trapframe->regs.sp = argv_array_addr;
+                current->trapframe->regs.a0 = 1;
+                current->trapframe->regs.a1 = argv_array_addr;
+            }
+        }
+    } else {
+        current->trapframe->regs.sp = USER_STACK_TOP;
+        current->trapframe->regs.a0 = 0;
+        current->trapframe->regs.a1 = 0;
+    }
+    flush_tlb();
+
+    return 0;
 }
