@@ -4,7 +4,7 @@
 
 #include "sched.h"
 #include "spike_interface/spike_utils.h"
-#include "lock.h"
+// #include "lock.h"
 #include "process.h"
 #include "sched.h"
 #include "spike_interface/spike_utils.h"
