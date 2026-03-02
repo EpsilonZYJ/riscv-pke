@@ -69,10 +69,79 @@ ssize_t sys_user_exit(uint64 code) {
 // maybe, the simplest implementation of malloc in the world ... added @lab2_2
 //
 uint64 sys_user_allocate_page(int n) {
-    if (n <= 0 || n > PGSIZE) {
+    if (n <= 0) {
         return (uint64)NULL;
     }
     n = ROUNDUP(n, 8); // 8-byte aligned
+
+    // 检查是否需要跨页分配（请求大小+pd头超过单页可用空间）
+    if (n + sizeof(pd) > PGSIZE - sizeof(pd)) {
+
+        // 跨页分配策略：
+        // 1. 尝试在现有空闲链表中找到起始位置（优先使用已有页面的空闲空间）
+        // 2. 从该位置放置pd头，然后为剩余数据分配新页面
+
+        pd *start_block = NULL;
+        uint64 start_va = 0;
+        uint64 start_pa = 0;
+
+        // 尝试从空闲链表找一个起始块
+        if (current->mem_rib.free_list != NULL) {
+            start_block = current->mem_rib.free_list;
+            start_pa = (uint64)start_block;
+            start_va = pa_to_user_va((pagetable_t)current->pagetable, start_pa);
+
+            // 从空闲链表移除这个块
+            current->mem_rib.free_list = start_block->next;
+        } else {
+            // 没有空闲块，分配一个新页作为起点
+            void *pa = alloc_page();
+            if (pa == NULL) {
+                return (uint64)NULL;
+            }
+            start_pa = (uint64)pa;
+            start_va = current->user_heap_top;
+            user_vm_map((pagetable_t)current->pagetable, start_va, PGSIZE, start_pa,
+                        prot_to_type(PROT_WRITE | PROT_READ, 1));
+            current->user_heap_top += PGSIZE;
+            start_block = (pd *)start_pa;
+        }
+
+        // 计算需要多少额外的完整页面
+        // start_block所在页面可用空间
+        uint64 start_page_base = (start_pa / PGSIZE) * PGSIZE;
+        uint64 available_in_first_page = PGSIZE - (start_pa - start_page_base);
+
+        // 总共需要的空间
+        uint64 total_needed = sizeof(pd) + n;
+
+        // 如果第一个页面不够，分配额外页面
+        if (total_needed > available_in_first_page) {
+            uint64 remaining = total_needed - available_in_first_page;
+            uint64 extra_pages = (remaining + PGSIZE - 1) / PGSIZE;
+
+            for (uint64 i = 0; i < extra_pages; i++) {
+                void *pa = alloc_page();
+                if (pa == NULL) {
+                    return (uint64)NULL;
+                }
+                uint64 va = current->user_heap_top;
+                user_vm_map((pagetable_t)current->pagetable, va, PGSIZE, (uint64)pa,
+                            prot_to_type(PROT_WRITE | PROT_READ, 1));
+                current->user_heap_top += PGSIZE;
+            }
+        }
+
+        // 设置pd结构
+        start_block->flag = 1;
+        start_block->size = n;
+        start_block->next = current->mem_rib.alloc_list;
+        current->mem_rib.alloc_list = start_block;
+
+        return start_va + sizeof(pd);
+    }
+
+    // 单页内分配
     uint64 alloc_pa = current->mem_rib.alloc(n, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
     if (alloc_pa == (uint64)NULL) {
         void *pa = alloc_page();
