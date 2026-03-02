@@ -11,7 +11,7 @@
 #include "sched.h"
 #include "memlayout.h"
 #include "spike_interface/spike_utils.h"
-#include "semaphore.h"
+// #include "semaphore.h"
 
 //
 // trap_sec_start points to the beginning of S-mode trap segment (i.e., the entry point of

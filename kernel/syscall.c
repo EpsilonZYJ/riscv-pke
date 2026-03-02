@@ -15,8 +15,8 @@
 #include "sched.h"
 
 #include "spike_interface/spike_utils.h"
-#include "kernel/semaphore.h"
-#include "semaphore.h"
+// #include "kernel/semaphore.h"
+// #include "semaphore.h"
 
 //
 // implement the SYS_user_print syscall
