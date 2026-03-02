@@ -11,3 +11,4 @@ obj/
 .vscode/
 pke_out.txt
 .idea/
+hostfs_root/bin/
