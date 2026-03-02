@@ -182,6 +182,15 @@ ssize_t do_exec(char *command, char *para) {
     current->mapped_info[STACK_SEGMENT].va = USER_STACK_TOP - PGSIZE;
     current->mapped_info[STACK_SEGMENT].npages = 1;
     current->mapped_info[STACK_SEGMENT].seg_type = STACK_SEGMENT;
+
+    // Reinitialize HEAP_SEGMENT after cleanup
+    current->mapped_info[HEAP_SEGMENT].va = USER_FREE_ADDRESS_START;
+    current->mapped_info[HEAP_SEGMENT].npages = 0;
+    current->mapped_info[HEAP_SEGMENT].seg_type = HEAP_SEGMENT;
+
+    // Reset total_mapped_region to 4 (STACK, CONTEXT, SYSTEM, HEAP are the base segments)
+    current->total_mapped_region = 4;
+
     load_bincode_from_host_elf(current, k_command);
 
     if (strlen(k_para) > 0) {
