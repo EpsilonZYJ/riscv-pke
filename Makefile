@@ -225,11 +225,12 @@ run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGE
 
 # need openocd!
 gdb:$(KERNEL_TARGET) $(USER_SHELL_TARGET)
-	spike --rbb-port=9824 -H $(KERNEL_TARGET) $(USER_SHELL_TARGET) &
+	spike --rbb-port=9824 $(KERNEL_TARGET) $(USER_SHELL_TARGET) &
+ &
 	@sleep 1
 	openocd -f ./.spike.cfg &
 	@sleep 1
-	riscv64-unknown-elf-gdb -command=./.gdbinit
+	riscv64-elf-gdb -command=./.gdbinit
 
 # clean gdb. need openocd!
 gdb_clean:
