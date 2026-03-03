@@ -24,8 +24,13 @@ struct hash_table vinode_hash_table;
 //
 static inline struct dentry *get_path_start_dentry(const char *path) {
     if (path[0] == '/') {
+        // absolute path always starts from root
         return vfs_root_dentry;
     } else {
+        // relative path: must have a valid current process
+        if (current == NULL || current->pfiles == NULL) {
+            panic("get_path_start_dentry: cannot use relative path without process context!\n");
+        }
         return current->pfiles->cwd;
     }
 }
