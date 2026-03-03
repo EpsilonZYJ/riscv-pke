@@ -34,7 +34,8 @@ int link_u(const char *fn1, const char *fn2);
 int unlink_u(const char *fn);
 
 int wait(int pid);
-
 int exec(char *command, char *para);
+int read_cwd(char *path);
+int change_cwd(const char *path);
 
 #endif

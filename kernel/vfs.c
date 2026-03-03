@@ -5,6 +5,7 @@
 #include "vfs.h"
 
 #include "pmm.h"
+#include "process.h"
 #include "spike_interface/spike_utils.h"
 #include "util/string.h"
 #include "util/types.h"
@@ -109,7 +110,7 @@ struct super_block *vfs_mount(const char *dev_name, int mnt_type) {
 // return: the file pointer to the opened file.
 //
 struct file *vfs_open(const char *path, int flags) {
-    struct dentry *parent = vfs_root_dentry; // we start the path lookup from root.
+    struct dentry *parent = current->pfiles->cwd; // we start the path lookup from root.
     char miss_name[MAX_PATH_LEN];
 
     // path lookup.
@@ -259,7 +260,7 @@ int vfs_disk_stat(struct file *file, struct istat *istat) {
 // return: -1 on failure, 0 on success.
 //
 int vfs_link(const char *oldpath, const char *newpath) {
-    struct dentry *parent = vfs_root_dentry;
+    struct dentry *parent = current->pfiles->cwd;
     char miss_name[MAX_PATH_LEN];
 
     // lookup oldpath
@@ -275,7 +276,7 @@ int vfs_link(const char *oldpath, const char *newpath) {
         return -1;
     }
 
-    parent = vfs_root_dentry;
+    parent = current->pfiles->cwd;
     // lookup the newpath
     // note that parent is changed to be the last directory entry to be accessed
     struct dentry *new_file_dentry =
@@ -309,7 +310,7 @@ int vfs_link(const char *oldpath, const char *newpath) {
 // return: -1 on failure, 0 on success.
 //
 int vfs_unlink(const char *path) {
-    struct dentry *parent = vfs_root_dentry;
+    struct dentry *parent = current->pfiles->cwd;
     char miss_name[MAX_PATH_LEN];
 
     // lookup the file, find its parent direntry
@@ -397,7 +398,7 @@ int vfs_close(struct file *file) {
 // open a dir at vfs layer. the directory must exist on disk.
 //
 struct file *vfs_opendir(const char *path) {
-    struct dentry *parent = vfs_root_dentry;
+    struct dentry *parent = current->pfiles->cwd;
     char miss_name[MAX_PATH_LEN];
 
     // lookup the dir
@@ -440,7 +441,7 @@ int vfs_readdir(struct file *file, struct dir *dir) {
 // and its parent directory must exist.
 //
 int vfs_mkdir(const char *path) {
-    struct dentry *parent = vfs_root_dentry;
+    struct dentry *parent = current->pfiles->cwd;
     char miss_name[MAX_PATH_LEN];
 
     // lookup the dir, find its parent direntry
@@ -508,6 +509,15 @@ struct dentry *lookup_final_dentry(const char *path, struct dentry **parent,
     char path_copy[MAX_PATH_LEN];
     strcpy(path_copy, path);
 
+    struct dentry *start_dentry;
+    if (path[0] == '/') {
+        // absolute path, start from root
+        start_dentry = vfs_root_dentry;
+        *parent = vfs_root_dentry;
+    } else {
+        // relative path, start from parent
+        start_dentry = *parent;
+    }
     // split the path, and retrieves a token at a time.
     // note: strtok() uses a static (local) variable to store the input path
     // string at the first time it is called. thus it can out a token each time.
@@ -515,9 +525,22 @@ struct dentry *lookup_final_dentry(const char *path, struct dentry **parent,
     // strtok() outputs three tokens: 1)RAMDISK0, 2)test_dir and 3)ramfile2
     // at its three continuous invocations.
     char *token = strtok(path_copy, "/");
-    struct dentry *this = *parent;
+    struct dentry *this = start_dentry;
 
     while (token != NULL) {
+        if (strcmp(token, ".") == 0) {
+            token = strtok(NULL, "/");
+            continue;
+        } else if (strcmp(token, "..") == 0) {
+            if (this->parent != NULL) {
+                this = this->parent;
+                *parent = this->parent;
+            }
+            // 如果已经是根目录了，不作处理
+            token = strtok(NULL, "/");
+            continue;
+        }
+
         *parent = this;
         this = hash_get_dentry((*parent), token); // try hash first
         if (this == NULL) {
