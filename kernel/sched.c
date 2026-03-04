@@ -192,10 +192,10 @@ int do_fork(process *parent) {
             child->mapped_info[HEAP_SEGMENT].seg_type = HEAP_SEGMENT;
             child->mapped_info[HEAP_SEGMENT].va = parent->mapped_info[HEAP_SEGMENT].va;
 
-            // copy the heap manager from parent to child
+            // copy the heap manager from parent to child.
+            // NOTE: keep copied lists, COW page fault handler will remap list pointers
+            // from old physical page to new copied page when needed.
             memcpy((void *)&child->user_heap, (void *)&parent->user_heap, sizeof(parent->user_heap));
-            child->user_heap.mem_rib.alloc_list = NULL;
-            child->user_heap.mem_rib.free_list = NULL;
             break;
         }
         case CODE_SEGMENT:

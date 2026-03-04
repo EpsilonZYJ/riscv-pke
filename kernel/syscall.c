@@ -53,8 +53,8 @@ ssize_t sys_user_exit(uint64 code) {
             alloc_item = current->user_heap.mem_rib.alloc_list;
         }
     }
-    sort_free_list_ascend(&current->user_heap.mem_rib.free_list, pd_first_fit_cmp);
-    merge_free_blocks(&current->user_heap.mem_rib.free_list, pd_first_fit_cmp);
+    sort_free_list_ascend(&current->user_heap.mem_rib.free_list, PD_CMP_FUNC);
+    merge_free_blocks(&current->user_heap.mem_rib.free_list, PD_CMP_FUNC);
 
     pd *free_item = current->user_heap.mem_rib.free_list;
     if (free_item != NULL) {
@@ -83,9 +83,6 @@ ssize_t sys_user_exit(uint64 code) {
             user_vm_unmap((pagetable_t)current->pagetable, heap_va, PGSIZE, 1);
         }
     }
-
-    current->user_heap.mem_rib.alloc_list = NULL;
-    current->user_heap.mem_rib.free_list = NULL;
 
     if (tmp == NULL) {
         schedule();
@@ -192,7 +189,7 @@ uint64 sys_user_allocate_mem(int n) {
         new_free_block->flag = 0;
         new_free_block->size = PGSIZE - sizeof(pd);
         new_free_block->next = NULL;
-        insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block, pd_first_fit_cmp);
+        insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block, PD_CMP_FUNC);
 
         alloc_pa = current->user_heap.mem_rib.alloc(n, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
         if (alloc_pa == (uint64)NULL) {

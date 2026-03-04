@@ -179,6 +179,18 @@ int free_process(process *proc) {
     return 0;
 }
 
+void insert_alloc_block(pd **p_alloc_list, pd *new_alloc_block) {
+    if (*p_alloc_list == NULL && new_alloc_block == NULL) return;
+    if (*p_alloc_list == NULL && new_alloc_block != NULL) {
+        *p_alloc_list = new_alloc_block;
+        new_alloc_block->next = NULL;
+        return;
+    }
+    new_alloc_block->next = *p_alloc_list;
+    *p_alloc_list = new_alloc_block;
+    return;
+}
+
 // 插入空闲块到空闲链表
 void insert_free_block(pd **p_free_list, pd *new_free_block, int (*ascend_cmp)(pd *, pd *)) {
     if (ascend_cmp == NULL) return;
@@ -269,7 +281,7 @@ void merge_free_blocks(pd **p_free_list, int (*ascend_cmp)(pd *, pd *)) {
     }
 
     // 先将空闲链表按地址排序，便于合并
-    sort_free_list_ascend(p_free_list, pd_first_fit_cmp);
+    sort_free_list_ascend(p_free_list, PD_CMP_FUNC);
 
     pd *cur = *p_free_list;
     while (cur && cur->next) {
@@ -381,9 +393,9 @@ uint64 first_fit_free(uint64 addr, pd **p_free_list, pd **p_alloc_list) {
         to_free->next = *p_free_list;
         *p_free_list = to_free;
         // 重新排序空闲链表
-        sort_pd_list_ascend(p_free_list, &to_free, pd_first_fit_cmp);
+        sort_pd_list_ascend(p_free_list, &to_free, PD_CMP_FUNC);
         // 合并相邻空闲块
-        merge_free_blocks(p_free_list, pd_first_fit_cmp);
+        merge_free_blocks(p_free_list, PD_CMP_FUNC);
         return size;
     }
     pd *prev = to_free;
@@ -407,9 +419,9 @@ uint64 first_fit_free(uint64 addr, pd **p_free_list, pd **p_alloc_list) {
             to_free->next = *p_free_list;
             *p_free_list = to_free;
             // 重新排序空闲链表
-            sort_pd_list_ascend(p_free_list, &to_free, pd_first_fit_cmp);
+            sort_pd_list_ascend(p_free_list, &to_free, PD_CMP_FUNC);
             // 合并相邻空闲块
-            merge_free_blocks(p_free_list, pd_first_fit_cmp);
+            merge_free_blocks(p_free_list, PD_CMP_FUNC);
             return size;
         } else {
             prev = to_free;

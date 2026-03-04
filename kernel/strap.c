@@ -47,6 +47,30 @@ void handle_mtimer_trap() {
     write_csr(sip, read_csr(sip) & ~SIP_SSIP);
 }
 
+static inline pd *remap_pd_ptr_in_cow_page(pd *ptr, uint64 old_pa, uint64 new_pa) {
+    if (ptr == NULL) return NULL;
+    uint64 addr = (uint64)ptr;
+    // 如果ptr指向的地址在旧物理页范围内，则将其重映射到新物理页的对应地址
+    if (addr >= old_pa && addr < old_pa + PGSIZE) {
+        return (pd *)(new_pa + (addr - old_pa));
+    }
+    return ptr;
+}
+
+static void remap_heap_lists_for_cow_page(process *proc, uint64 old_pa, uint64 new_pa) {
+    proc->user_heap.mem_rib.alloc_list =
+        remap_pd_ptr_in_cow_page(proc->user_heap.mem_rib.alloc_list, old_pa, new_pa);
+    proc->user_heap.mem_rib.free_list =
+        remap_pd_ptr_in_cow_page(proc->user_heap.mem_rib.free_list, old_pa, new_pa);
+
+    for (pd *it = proc->user_heap.mem_rib.alloc_list; it != NULL; it = it->next) {
+        it->next = remap_pd_ptr_in_cow_page(it->next, old_pa, new_pa);
+    }
+    for (pd *it = proc->user_heap.mem_rib.free_list; it != NULL; it = it->next) {
+        it->next = remap_pd_ptr_in_cow_page(it->next, old_pa, new_pa);
+    }
+}
+
 //
 // the page fault handler. added @lab2_3. parameters:
 // sepc: the pc when fault happens;
@@ -70,8 +94,12 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
                     new_page = (uint64)alloc_page();
                     memcpy((void *)new_page, (void *)old_pa, PGSIZE);
                     dec_page_ref((void *)old_pa);
-                    // FIXME: 重建子进程的堆管理器
-                } else {
+
+                    // Heap page COW: remap copied heap-metadata list pointers
+                    // from old physical page to new copied page by offset.
+                    if (stval >= current->user_heap.heap_bottom && stval < current->user_heap.heap_top) {
+                        remap_heap_lists_for_cow_page(current, old_pa, new_page);
+                    }
                 }
                 uint64 flags = PTE_FLAGS(*pte);
                 flags &= ~PTE_COW;                       // clear the copy-on-write bit

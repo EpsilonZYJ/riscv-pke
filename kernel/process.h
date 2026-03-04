@@ -119,6 +119,7 @@ extern process *block_queue_head;
 int pd_first_fit_cmp(pd *a, pd *b);
 void sort_pd_list_ascend(pd **plist_head, pd **changed_item, int (*ascend_cmp)(pd *, pd *));
 void merge_free_blocks(pd **p_free_list, int (*ascend_cmp)(pd *, pd *));
+void insert_alloc_block(pd **p_alloc_list, pd *new_alloc_block);
 void insert_free_block(pd **p_free_list, pd *new_free_block, int (*ascend_cmp)(pd *, pd *));
 void sort_free_list_ascend(pd **plist_head, int (*ascend_cmp)(pd *, pd *));
 

@@ -6,7 +6,6 @@
 #include "memlayout.h"
 #include "spike_interface/spike_utils.h"
 
-#define MAX_PAGES 0x10000
 static int page_ref_count[MAX_PAGES];
 
 // _end is defined in kernel/kernel.lds, it marks the ending (virtual) address of PKE kernel

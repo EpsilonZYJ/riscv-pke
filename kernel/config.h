@@ -12,6 +12,9 @@
 // interval of timer interrupt. added @lab1_3
 #define TIMER_INTERVAL 1000000
 
+// 最大页数，限制了PKE能够管理的最大内存空间
+#define MAX_PAGES 0x10000
+
 // the maximum memory space that PKE is allowed to manage. added @lab2_1
 #define PKE_MAX_ALLOWABLE_RAM 128 * 1024 * 1024
 
@@ -23,5 +26,6 @@
 // 动态生成函数名宏
 #define ALLOC_FUNC EXPAND_CONCAT(MEM_ALLOC_STRATEGY, _alloc)
 #define FREE_FUNC EXPAND_CONCAT(MEM_ALLOC_STRATEGY, _free)
+#define PD_CMP_FUNC EXPAND_CONCAT(pd_, EXPAND_CONCAT(MEM_ALLOC_STRATEGY, _cmp))
 
 #endif
