@@ -308,7 +308,7 @@ uint64 first_fit_alloc(uint64 size, pd **p_free_list, pd **p_alloc_list) {
     pd *prev = NULL;
 
     while (alloc_item) {
-        if (alloc_item->size == size + sizeof(pd)) {
+        if (alloc_item->size == size) {
             // 刚好合适
             alloc_item->flag = 1;
             alloc_item->size = 0;
@@ -326,9 +326,9 @@ uint64 first_fit_alloc(uint64 size, pd **p_free_list, pd **p_alloc_list) {
             // 在分配块头部记录大小信息，便于释放时使用
             alloc_item->size = size;
 
-            return (uint64)alloc_item + sizeof(pd);
-        } else if (alloc_item->size < size + sizeof(pd)) {
-            // 空闲块太小，继续找下一个
+            return (uint64)alloc_item;
+        } else if (alloc_item->size < size || alloc_item->size <= size + sizeof(pd)) {
+            // 空闲块太小或者空闲块不适合拆分，继续找下一个
             prev = alloc_item;
             alloc_item = alloc_item->next;
         } else {
@@ -364,7 +364,7 @@ uint64 first_fit_alloc(uint64 size, pd **p_free_list, pd **p_alloc_list) {
             alloc_pd->next = *p_alloc_list;
             *p_alloc_list = alloc_pd;
 
-            return (uint64)alloc_pd + sizeof(pd);
+            return (uint64)alloc_pd;
         }
     }
     return (uint64)NULL;
@@ -377,17 +377,10 @@ uint64 first_fit_free(uint64 addr, pd **p_free_list, pd **p_alloc_list) {
     }
     pd *to_free = *p_alloc_list;
     uint64 size = to_free->size;
-    if (addr == (uint64)to_free + sizeof(pd)) {
+    if (addr == (uint64)to_free) {
         to_free->flag = 0;
         // 从已分配链表中移除
         *p_alloc_list = to_free->next;
-
-        // 检查是否为跨页块（size + sizeof(pd) > PGSIZE）
-        if (size + sizeof(pd) > PGSIZE) {
-            // 跨页块不加入free_list，直接释放即可
-            // 物理页面会在进程结束时统一回收
-            return size;
-        }
 
         // 单页内块：加入空闲链表
         to_free->next = *p_free_list;
@@ -404,16 +397,10 @@ uint64 first_fit_free(uint64 addr, pd **p_free_list, pd **p_alloc_list) {
         size = to_free->size;
     }
     while (to_free) {
-        if (addr == (uint64)to_free + sizeof(pd)) {
+        if (addr == (uint64)to_free) {
             to_free->flag = 0;
             // 从已分配链表中移除
             prev->next = to_free->next;
-
-            // 检查是否为跨页块
-            if (size + sizeof(pd) > PGSIZE) {
-                // 跨页块不加入free_list
-                return size;
-            }
 
             // 单页内块：加入空闲链表
             to_free->next = *p_free_list;
@@ -432,4 +419,21 @@ uint64 first_fit_free(uint64 addr, pd **p_free_list, pd **p_alloc_list) {
         }
     }
     panic("free error: cannot find the allocated block.\n");
+}
+
+void remove_from_pd_list(pd **plist_head, pd *item) {
+    if (*plist_head == NULL || item == NULL) {
+        return;
+    }
+    pd *prev = *plist_head;
+    if (prev == item) {
+        *plist_head = item->next;
+        return;
+    }
+    while (prev && prev->next != item) {
+        prev = prev->next;
+    }
+    if (prev && prev->next == item) {
+        prev->next = item->next;
+    }
 }
