@@ -90,7 +90,7 @@ USER_EXEC_TARGET 	:= $(HOSTFS_ROOT)/bin/app_exec
 
 USER_RELA_TARGET	:= $(HOSTFS_ROOT)/bin/app_relativepath
 
-USER_RELA_TARGET	:= $(HOSTFS_ROOT)/bin/app_cow
+USER_COW_TARGET	:= $(HOSTFS_ROOT)/bin/app_cow
 
 #--
 
