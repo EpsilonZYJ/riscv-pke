@@ -19,6 +19,10 @@
 #define SYS_user_sem_new (SYS_user_base + 6)
 #define SYS_user_sem_P (SYS_user_base + 7)
 #define SYS_user_sem_V (SYS_user_base + 8)
+
+#define SYS_user_allocate_mem (SYS_user_base + 9)
+#define SYS_user_free_mem (SYS_user_base + 10)
+
 // added @lab4_1
 #define SYS_user_open (SYS_user_base + 17)
 #define SYS_user_read (SYS_user_base + 18)
@@ -41,8 +45,6 @@
 #define SYS_user_wait (SYS_user_base + 32)
 #define SYS_user_exec (SYS_user_base + 33)
 #define SYS_user_printpa (SYS_user_base + 34)
-
-
 
 long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7);
 

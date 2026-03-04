@@ -35,8 +35,8 @@ void enable_paging() {
 }
 
 typedef union {
-  uint64 buf[MAX_CMDLINE_ARGS];
-  char *argv[MAX_CMDLINE_ARGS];
+    uint64 buf[MAX_CMDLINE_ARGS];
+    char *argv[MAX_CMDLINE_ARGS];
 } arg_buf;
 
 //
@@ -44,20 +44,20 @@ typedef union {
 // and store the string(s) in arg_bug_msg.
 //
 static size_t parse_args(arg_buf *arg_bug_msg) {
-  // HTIFSYS_getmainvars frontend call reads command arguments to (input) *arg_bug_msg
-  long r = frontend_syscall(HTIFSYS_getmainvars, (uint64)arg_bug_msg,
-      sizeof(*arg_bug_msg), 0, 0, 0, 0, 0);
-  kassert(r == 0);
+    // HTIFSYS_getmainvars frontend call reads command arguments to (input) *arg_bug_msg
+    long r = frontend_syscall(HTIFSYS_getmainvars, (uint64)arg_bug_msg,
+                              sizeof(*arg_bug_msg), 0, 0, 0, 0, 0);
+    kassert(r == 0);
 
-  size_t pk_argc = arg_bug_msg->buf[0];
-  uint64 *pk_argv = &arg_bug_msg->buf[1];
+    size_t pk_argc = arg_bug_msg->buf[0];
+    uint64 *pk_argv = &arg_bug_msg->buf[1];
 
-  int arg = 1;  // skip the PKE OS kernel string, leave behind only the application name
-  for (size_t i = 0; arg + i < pk_argc; i++)
-    arg_bug_msg->argv[i] = (char *)(uintptr_t)pk_argv[arg + i];
+    int arg = 1; // skip the PKE OS kernel string, leave behind only the application name
+    for (size_t i = 0; arg + i < pk_argc; i++)
+        arg_bug_msg->argv[i] = (char *)(uintptr_t)pk_argv[arg + i];
 
-  //returns the number of strings after PKE kernel in command line
-  return pk_argc - arg;
+    // returns the number of strings after PKE kernel in command line
+    return pk_argc - arg;
 }
 
 //
@@ -69,22 +69,16 @@ process *load_user_program() {
 
     proc = alloc_process();
 
-    proc->mem_rib.alloc_list = NULL;
-    proc->mem_rib.free_list = NULL;
-    proc->mem_rib.alloc = first_fit_alloc;
-    proc->mem_rib.free = first_fit_free;
-    proc->user_heap_top = USER_FREE_ADDRESS_START;
-
     sprint("User application is loading.\n");
 
-  arg_buf arg_bug_msg;
+    arg_buf arg_bug_msg;
 
-  // retrieve command line arguements
-  size_t argc = parse_args(&arg_bug_msg);
-  if (!argc) panic("You need to specify the application program!\n");
+    // retrieve command line arguements
+    size_t argc = parse_args(&arg_bug_msg);
+    if (!argc) panic("You need to specify the application program!\n");
 
-  load_bincode_from_host_elf(proc, arg_bug_msg.argv[0]);
-  return proc;
+    load_bincode_from_host_elf(proc, arg_bug_msg.argv[0]);
+    return proc;
 }
 
 //
@@ -119,7 +113,7 @@ int s_start(void) {
     sprint("Switch to user mode...\n");
     // the application code (elf) is first loaded into memory, and then put into execution
     // added @lab3_1
-    insert_to_ready_queue( load_user_program() );
+    insert_to_ready_queue(load_user_program());
     schedule();
 
     // we should never reach here.

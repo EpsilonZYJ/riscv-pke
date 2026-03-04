@@ -71,7 +71,6 @@ ssize_t sys_user_exit(uint64 code) {
         }
     }
 
-
     if (tmp == NULL) {
         schedule();
         return 0;
@@ -81,30 +80,6 @@ ssize_t sys_user_exit(uint64 code) {
     insert_to_ready_queue(current);
     schedule();
     return 0;
-}
-
-//
-// maybe, the simplest implementation of malloc in the world ... added @lab2_2
-//
-uint64 sys_user_allocate_page() {
-    void *pa = alloc_page();
-    uint64 va;
-    // if there are previously reclaimed pages, use them first (this does not change the
-    // size of the heap)
-    if (current->user_heap.free_pages_count > 0) {
-        va = current->user_heap.free_pages_address[--current->user_heap.free_pages_count];
-        assert(va < current->user_heap.heap_top);
-    } else {
-        // otherwise, allocate a new page (this increases the size of the heap by one page)
-        va = current->user_heap.heap_top;
-        current->user_heap.heap_top += PGSIZE;
-
-        current->mapped_info[HEAP_SEGMENT].npages++;
-    }
-    user_vm_map((pagetable_t)current->pagetable, va, PGSIZE, (uint64)pa,
-                prot_to_type(PROT_WRITE | PROT_READ, 1));
-
-    return va;
 }
 
 //
@@ -118,7 +93,6 @@ uint64 sys_user_allocate_mem(int n) {
 
     // 检查是否需要跨页分配（请求大小+pd头超过单页可用空间）
     if (n + sizeof(pd) > PGSIZE - sizeof(pd)) {
-
         // 跨页分配策略：
         // 1. 尝试在现有空闲链表中找到起始位置（优先使用已有页面的空闲空间）
         // 2. 从该位置放置pd头，然后为剩余数据分配新页面
@@ -211,6 +185,13 @@ uint64 sys_user_allocate_mem(int n) {
 }
 
 //
+// maybe, the simplest implementation of malloc in the world ... added @lab2_2
+//
+inline uint64 sys_user_allocate_page() {
+    return sys_user_allocate_mem(PGSIZE - sizeof(pd));
+}
+
+//
 // reclaim a page, indicated by "va". added @lab2_2
 //
 uint64 sys_user_free_mem(uint64 va) {
@@ -223,10 +204,8 @@ uint64 sys_user_free_mem(uint64 va) {
 //
 // reclaim a page, indicated by "va". added @lab2_2
 //
-uint64 sys_user_free_page(uint64 va) {
-    user_vm_unmap((pagetable_t)current->pagetable, va, PGSIZE, 1);
-    // add the reclaimed page to the free page list
-    current->user_heap.free_pages_address[current->user_heap.free_pages_count++] = va;
+inline uint64 sys_user_free_page(uint64 va) {
+    sys_user_free_mem(va);
     return 0;
 }
 

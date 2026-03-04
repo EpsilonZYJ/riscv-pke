@@ -142,13 +142,16 @@ process *alloc_process() {
     sprint("in alloc_proc. user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n",
            procs[i].trapframe, procs[i].trapframe->regs.sp, procs[i].kstack);
 
-    // initialize the process's heap manager
-    procs[i].user_heap.heap_top = USER_FREE_ADDRESS_START;
-    procs[i].user_heap.heap_bottom = USER_FREE_ADDRESS_START;
-    procs[i].user_heap.free_pages_count = 0;
+    procs[i].mem_rib.alloc_list = NULL;
+    procs[i].mem_rib.free_list = NULL;
+    procs[i].mem_rib.alloc = ALLOC_FUNC;
+    procs[i].mem_rib.free = FREE_FUNC;
+    procs[i].user_heap_top = USER_FREE_ADDRESS_START;
 
     // map user heap in userspace
-    procs[i].mapped_info[HEAP_SEGMENT].va = USER_FREE_ADDRESS_START;
+    procs[i]
+        .mapped_info[HEAP_SEGMENT]
+        .va = USER_FREE_ADDRESS_START;
     procs[i].mapped_info[HEAP_SEGMENT].npages = 0; // no pages are mapped to heap yet.
     procs[i].mapped_info[HEAP_SEGMENT].seg_type = HEAP_SEGMENT;
 
