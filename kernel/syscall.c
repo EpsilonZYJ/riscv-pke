@@ -16,6 +16,8 @@
 #include "proc_file.h"
 
 #include "spike_interface/spike_utils.h"
+#include "kernel/semaphore.h"
+#include "semaphore.h"
 
 #include "elf.h"
 
@@ -104,6 +106,50 @@ ssize_t sys_user_yield() {
     insert_to_ready_queue(current);
     schedule();
     return 0;
+}
+
+/**
+ * @brief 创建一个新的信号量
+ * @param initval 信号量的初始值
+ * @return 信号量的id，失败返回-1
+ */
+ssize_t sys_user_sem_new(int initval) {
+    semaphore *sem = alloc_semaphore();
+    if (sem == NULL) {
+        return -1;
+    }
+    sem->value = initval;
+    return sem->sem_id;
+}
+
+/**
+ * @brief P操作信号量
+ * @param semid 信号量的id
+ * @return 成功返回0，失败返回-1
+ */
+ssize_t sys_user_sem_P(int semid) {
+    semaphore *sem = get_semaphore(semid);
+    if (sem == NULL) {
+        return -1;
+    } else {
+        semaphore_P(sem);
+        return 0;
+    }
+}
+
+/**
+ * @brief V操作信号量
+ * @param semid 信号量的id
+ * @return 成功返回0，失败返回-1
+ */
+ssize_t sys_user_sem_V(int semid) {
+    semaphore *sem = get_semaphore(semid);
+    if (sem == NULL) {
+        return -1;
+    } else {
+        semaphore_V(sem);
+        return 0;
+    }
 }
 
 ssize_t sys_user_printpa(uint64 va)
@@ -326,6 +372,12 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
         return sys_user_ccwd((char *)a1);
     case SYS_user_printpa:
       return sys_user_printpa(a1);
+    case SYS_user_sem_new:
+        return sys_user_sem_new(a1);
+    case SYS_user_sem_P:
+        return sys_user_sem_P(a1);
+    case SYS_user_sem_V:
+        return sys_user_sem_V(a1);
     default:
         panic("Unknown syscall %ld \n", a0);
     }

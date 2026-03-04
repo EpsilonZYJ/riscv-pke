@@ -3,10 +3,14 @@
 
 #include "process.h"
 
-//length of a time slice, in number of ticks
-#define TIME_SLICE_LEN  2
+// length of a time slice, in number of ticks
+#define TIME_SLICE_LEN 2
 
-void insert_to_ready_queue( process* proc );
+void insert_to_ready_queue(process *proc);
+void insert_to_block_queue(process **pblock_queue_head, process *proc);
+process *wake_from_block_queue(process **pblock_queue_head, process *child_process);
+process *remove_from_block_queue(process **pblock_queue_head, process *proc);
+process *pick_and_remove_from_block_queue(process **pblock_queue_head);
 void schedule();
 
 #endif

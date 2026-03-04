@@ -15,6 +15,7 @@
 #include "vfs.h"
 #include "rfs.h"
 #include "ramdev.h"
+#include "semaphore.h"
 
 //
 // trap_sec_start points to the beginning of S-mode trap segment (i.e., the entry point of
@@ -26,11 +27,11 @@ extern char trap_sec_start[];
 // turn on paging. added @lab2_1
 //
 void enable_paging() {
-  // write the pointer to kernel page (table) directory into the CSR of "satp".
-  write_csr(satp, MAKE_SATP(g_kernel_pagetable));
+    // write the pointer to kernel page (table) directory into the CSR of "satp".
+    write_csr(satp, MAKE_SATP(g_kernel_pagetable));
 
-  // refresh tlb to invalidate its content.
-  flush_tlb();
+    // refresh tlb to invalidate its content.
+    flush_tlb();
 }
 
 typedef union {
@@ -63,11 +64,11 @@ static size_t parse_args(arg_buf *arg_bug_msg) {
 // load the elf, and construct a "process" (with only a trapframe).
 // load_bincode_from_host_elf is defined in elf.c
 //
-process* load_user_program() {
-  process* proc;
+process *load_user_program() {
+    process *proc;
 
-  proc = alloc_process();
-  sprint("User application is loading.\n");
+    proc = alloc_process();
+    sprint("User application is loading.\n");
 
   arg_buf arg_bug_msg;
 
@@ -83,35 +84,37 @@ process* load_user_program() {
 // s_start: S-mode entry point of riscv-pke OS kernel.
 //
 int s_start(void) {
-  sprint("Enter supervisor mode...\n");
-  // in the beginning, we use Bare mode (direct) memory mapping as in lab1.
-  // but now, we are going to switch to the paging mode @lab2_1.
-  // note, the code still works in Bare mode when calling pmm_init() and kern_vm_init().
-  write_csr(satp, 0);
+    sprint("Enter supervisor mode...\n");
+    // in the beginning, we use Bare mode (direct) memory mapping as in lab1.
+    // but now, we are going to switch to the paging mode @lab2_1.
+    // note, the code still works in Bare mode when calling pmm_init() and kern_vm_init().
+    write_csr(satp, 0);
 
-  // init phisical memory manager
-  pmm_init();
+    // init phisical memory manager
+    pmm_init();
 
-  // build the kernel page table
-  kern_vm_init();
+    // build the kernel page table
+    kern_vm_init();
 
-  // now, switch to paging mode by turning on paging (SV39)
-  enable_paging();
-  // the code now formally works in paging mode, meaning the page table is now in use.
-  sprint("kernel page table is on \n");
+    // now, switch to paging mode by turning on paging (SV39)
+    enable_paging();
+    // the code now formally works in paging mode, meaning the page table is now in use.
+    sprint("kernel page table is on \n");
 
-  // added @lab3_1
-  init_proc_pool();
+    // added @lab3_1
+    init_proc_pool();
 
-  // init file system, added @lab4_1
-  fs_init();
+    // init file system, added @lab4_1
+    fs_init();
 
-  sprint("Switch to user mode...\n");
-  // the application code (elf) is first loaded into memory, and then put into execution
-  // added @lab3_1
-  insert_to_ready_queue( load_user_program() );
-  schedule();
+    init_semaphore_pool();
 
-  // we should never reach here.
-  return 0;
+    sprint("Switch to user mode...\n");
+    // the application code (elf) is first loaded into memory, and then put into execution
+    // added @lab3_1
+    insert_to_ready_queue( load_user_program() );
+    schedule();
+
+    // we should never reach here.
+    return 0;
 }

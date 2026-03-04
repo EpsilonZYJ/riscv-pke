@@ -72,6 +72,8 @@ USER_RELA_CPPS		:= user/app_relativepath.c user/user_lib.c
 
 USER_COW_CPPS		:= user/app_cow.c user/user_lib.c
 
+USER_SEMA_CPPS		:= user/app_semaphore.c user/user_lib.c
+
 #--
 
 USER_SHELL_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SHELL_CPPS)))
@@ -82,6 +84,8 @@ USER_RELA_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_RELA_CPPS
 
 USER_COW_OBJS		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_COW_CPPS)))
 
+USER_SEMA_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SEMA_CPPS)))
+
 #--
 
 USER_SHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/app_shell
@@ -90,7 +94,9 @@ USER_EXEC_TARGET 	:= $(HOSTFS_ROOT)/bin/app_exec
 
 USER_RELA_TARGET	:= $(HOSTFS_ROOT)/bin/app_relativepath
 
-USER_COW_TARGET	:= $(HOSTFS_ROOT)/bin/app_cow
+USER_COW_TARGET		:= $(HOSTFS_ROOT)/bin/app_cow
+
+USER_SEMA_TARGET	:= $(HOSTFS_ROOT)/bin/app_semaphore
 
 #--
 
@@ -98,31 +104,31 @@ USER_E_CPPS 		:= user/app_ls.c user/user_lib.c
 
 USER_E_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_E_CPPS)))
 
-USER_E_TARGET 	:= $(HOSTFS_ROOT)/bin/app_ls
+USER_E_TARGET 		:= $(HOSTFS_ROOT)/bin/app_ls
 
 USER_M_CPPS 		:= user/app_mkdir.c user/user_lib.c
 
 USER_M_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_M_CPPS)))
 
-USER_M_TARGET 	:= $(HOSTFS_ROOT)/bin/app_mkdir
+USER_M_TARGET 		:= $(HOSTFS_ROOT)/bin/app_mkdir
 
 USER_T_CPPS 		:= user/app_touch.c user/user_lib.c
 
 USER_T_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_T_CPPS)))
 
-USER_T_TARGET 	:= $(HOSTFS_ROOT)/bin/app_touch
+USER_T_TARGET 		:= $(HOSTFS_ROOT)/bin/app_touch
 
 USER_C_CPPS 		:= user/app_cat.c user/user_lib.c
 
 USER_C_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_C_CPPS)))
 
-USER_C_TARGET 	:= $(HOSTFS_ROOT)/bin/app_cat
+USER_C_TARGET 		:= $(HOSTFS_ROOT)/bin/app_cat
 
 USER_O_CPPS 		:= user/app_echo.c user/user_lib.c
 
 USER_O_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_O_CPPS)))
 
-USER_O_TARGET 	:= $(HOSTFS_ROOT)/bin/app_echo
+USER_O_TARGET 		:= $(HOSTFS_ROOT)/bin/app_echo
 #------------------------targets------------------------
 $(OBJ_DIR):
 	@-mkdir -p $(OBJ_DIR)
@@ -133,6 +139,7 @@ $(OBJ_DIR):
 	@-mkdir -p $(dir $(USER_EXEC_OBJS))
 	@-mkdir -p $(dir $(USER_RELA_OBJS))
 	@-mkdir -p $(dir $(USER_COW_OBJS))
+	@-mkdir -p $(dir $(USER_SEMA_OBJS))
 	@-mkdir -p $(dir $(USER_E_OBJS))
 	@-mkdir -p $(dir $(USER_M_OBJS))
 	@-mkdir -p $(dir $(USER_T_OBJS))
@@ -190,6 +197,13 @@ $(USER_COW_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_COW_OBJS)
 	@echo "User app has been built into" \"$@\"
 	@cp $@ $(OBJ_DIR)
 
+$(USER_SEMA_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_SEMA_OBJS)
+	@echo "linking" $@	...
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_SEMA_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+	@cp $@ $(OBJ_DIR)
+
 $(USER_E_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_E_OBJS)
 	@echo "linking" $@	...
 	-@mkdir -p $(HOSTFS_ROOT)/bin
@@ -225,10 +239,10 @@ $(USER_O_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_O_OBJS)
 
 .DEFAULT_GOAL := $(all)
 
-all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 .PHONY:all
 
-run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 	@echo "********************HUST PKE********************"
 	@echo "********************APP SHELL*******************"
 	spike $(KERNEL_TARGET) /bin/app_shell
@@ -238,6 +252,8 @@ run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGE
 	spike $(KERNEL_TARGET) /bin/app_relativepath
 	@echo "*********************APP COW**********************"
 	spike $(KERNEL_TARGET) /bin/app_cow
+	@echo "*********************APP SEMA*********************"
+	spike $(KERNEL_TARGET) /bin/app_semaphore
 
 # need openocd!
 gdb:$(KERNEL_TARGET) $(USER_SHELL_TARGET)
