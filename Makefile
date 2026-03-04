@@ -78,6 +78,8 @@ USER_WAIT_CPPS		:= user/app_wait.c user/user_lib.c
 
 USER_SUM_CPPS		:= user/app_sum_sequence.c user/user_lib.c
 
+USER_SING_CPPS		:= user/app_singlepageheap.c user/user_lib.c
+
 #--
 
 USER_SHELL_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SHELL_CPPS)))
@@ -92,7 +94,9 @@ USER_SEMA_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SEMA_CPPS
 
 USER_WAIT_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_WAIT_CPPS)))
 
-USER_SUM_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SUM_CPPS)))
+USER_SUM_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SUM_CPPS)))
+
+USER_SING_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SING_CPPS)))
 
 #--
 
@@ -108,7 +112,9 @@ USER_SEMA_TARGET	:= $(HOSTFS_ROOT)/bin/app_semaphore
 
 USER_WAIT_TARGET	:= $(HOSTFS_ROOT)/bin/app_wait
 
-USER_SUM_TARGET	:= $(HOSTFS_ROOT)/bin/app_sum_sequence
+USER_SUM_TARGET		:= $(HOSTFS_ROOT)/bin/app_sum_sequence
+
+USER_SING_TARGET	:= $(HOSTFS_ROOT)/bin/app_singlepageheap
 
 #--
 
@@ -154,6 +160,7 @@ $(OBJ_DIR):
 	@-mkdir -p $(dir $(USER_SEMA_OBJS))
 	@-mkdir -p $(dir $(USER_WAIT_OBJS))
 	@-mkdir -p $(dir $(USER_SUM_OBJS))
+	@-mkdir -p $(dir $(USER_SING_OBJS))
 	@-mkdir -p $(dir $(USER_E_OBJS))
 	@-mkdir -p $(dir $(USER_M_OBJS))
 	@-mkdir -p $(dir $(USER_T_OBJS))
@@ -232,6 +239,13 @@ $(USER_SUM_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_SUM_OBJS)
 	@echo "User app has been built into" \"$@\"
 	@cp $@ $(OBJ_DIR)
 
+$(USER_SING_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_SING_OBJS)
+	@echo "linking" $@	...
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_SING_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+	@cp $@ $(OBJ_DIR)
+
 $(USER_E_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_E_OBJS)
 	@echo "linking" $@	...
 	-@mkdir -p $(HOSTFS_ROOT)/bin
@@ -251,7 +265,7 @@ $(USER_T_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_T_OBJS)
 	@echo "User app has been built into" \"$@\"
 
 $(USER_C_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_C_OBJS)
-	@echo "linking" $@	...	
+	@echo "linking" $@	...
 	-@mkdir -p $(HOSTFS_ROOT)/bin
 	@$(COMPILE) --entry=main $(USER_C_OBJS) $(UTIL_LIB) -o $@
 	@echo "User app has been built into" \"$@\"
@@ -267,10 +281,10 @@ $(USER_O_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_O_OBJS)
 
 .DEFAULT_GOAL := $(all)
 
-all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 .PHONY:all
 
-run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 	@echo "********************HUST PKE********************"
 	@echo "********************APP SHELL*********************"
 	spike $(KERNEL_TARGET) /bin/app_shell
@@ -286,6 +300,8 @@ run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGE
 	spike $(KERNEL_TARGET) /bin/app_wait
 	@echo "*********************APP SUM**********************"
 	spike $(KERNEL_TARGET) /bin/app_sum_sequence
+	@echo "*********************APP SING*********************"
+	spike $(KERNEL_TARGET) /bin/app_singlepageheap
 
 # need openocd!
 gdb:$(KERNEL_TARGET) $(USER_SHELL_TARGET)

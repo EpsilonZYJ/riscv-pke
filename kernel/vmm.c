@@ -10,6 +10,7 @@
 #include "util/string.h"
 #include "spike_interface/spike_utils.h"
 #include "util/functions.h"
+#include "process.h"
 
 /* --- utility functions for virtual address mapping --- */
 //
@@ -220,4 +221,16 @@ void print_proc_vmspace(process *proc) {
         }
         sprint(", mapped to pa:%lx\n", lookup_pa(proc->pagetable, proc->mapped_info[i].va));
     }
+}
+
+uint64 pa_to_user_va(pagetable_t page_dir, uint64 pa) {
+    uint64 map_pa;
+    for (uint64 va = USER_FREE_ADDRESS_START; va < current->user_heap_top; va += PGSIZE) {
+        map_pa = lookup_pa(page_dir, va);
+        if (map_pa == 0) continue;
+        if (pa >= map_pa && pa < map_pa + PGSIZE) {
+            return va + (pa - map_pa);
+        }
+    }
+    return (uint64)NULL;
 }

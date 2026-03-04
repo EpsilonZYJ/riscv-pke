@@ -4,6 +4,19 @@
 #include "riscv.h"
 #include "proc_file.h"
 
+typedef struct pd_t {
+    int flag;          // 0空闲，1已用
+    uint64 size;       // 大小，单位：字节
+    struct pd_t *next; // 勾链字
+} pd;
+
+typedef struct m_rib_t {
+    pd *alloc_list;                                                    // 已分配链表头指针
+    pd *free_list;                                                     // 空闲链表头指针
+    uint64 (*alloc)(uint64 size, pd **p_free_list, pd **p_alloc_list); // 分配内存函数指针
+    uint64 (*free)(uint64 addr, pd **p_free_list, pd **p_alloc_list);  // 释放内存函数指针
+} m_rib;
+
 typedef struct trapframe_t {
     // space to store context (all common registers)
     /* offset:0   */ riscv_regs regs;
@@ -71,6 +84,9 @@ typedef struct process_t {
     // trapframe storing the context of a (User mode) process.
     trapframe *trapframe;
 
+    m_rib mem_rib; // 内存管理信息
+    uint64 user_heap_top; // 堆顶，以字节为单位，added @lab2_c
+
     // points to a page that contains mapped_regions. below are added @lab3_1
     mapped_region *mapped_info;
     // next free mapped region in mapped_info
@@ -109,5 +125,16 @@ int free_process(process *proc);
 extern process *current;
 
 extern process *block_queue_head;
+
+int pd_first_fit_cmp(pd *a, pd *b);
+void sort_pd_list_ascend(pd **plist_head, pd **changed_item, int (*ascend_cmp)(pd *, pd *));
+void merge_free_blocks(pd **p_free_list, int (*ascend_cmp)(pd *, pd *));
+void insert_free_block(pd **p_free_list, pd *new_free_block, int (*ascend_cmp)(pd *, pd *));
+void sort_free_list_ascend(pd **plist_head, int (*ascend_cmp)(pd *, pd *));
+
+// 首次适应分配算法
+uint64 first_fit_alloc(uint64 size, pd **p_free_list, pd **p_alloc_list);
+// 释放内存
+uint64 first_fit_free(uint64 addr, pd **p_free_list, pd **p_alloc_list);
 
 #endif

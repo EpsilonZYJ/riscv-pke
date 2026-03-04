@@ -68,6 +68,13 @@ process *load_user_program() {
     process *proc;
 
     proc = alloc_process();
+
+    proc->mem_rib.alloc_list = NULL;
+    proc->mem_rib.free_list = NULL;
+    proc->mem_rib.alloc = first_fit_alloc;
+    proc->mem_rib.free = first_fit_free;
+    proc->user_heap_top = USER_FREE_ADDRESS_START;
+
     sprint("User application is loading.\n");
 
   arg_buf arg_bug_msg;
