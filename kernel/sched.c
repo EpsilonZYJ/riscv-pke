@@ -4,6 +4,9 @@
 
 #include "sched.h"
 #include "spike_interface/spike_utils.h"
+#include "vmm.h"
+#include "pmm.h"
+#include "string.h"
 
 process *ready_queue_head = NULL;
 // process *block_queue_head = NULL;
@@ -144,4 +147,135 @@ void schedule() {
     current->status = RUNNING;
     sprint("going to schedule process %d to run.\n", current->pid);
     switch_to(current);
+}
+
+//
+// implements fork syscal in kernel. added @lab3_1
+// basic idea here is to first allocate an empty process (child), then duplicate the
+// context and data segments of parent process to the child, and lastly, map other
+// segments (code, system) of the parent to child. the stack segment remains unchanged
+// for the child.
+//
+int do_fork(process *parent) {
+    sprint("will fork a child from parent %d.\n", parent->pid);
+    process *child = alloc_process();
+
+    for (int i = 0; i < parent->total_mapped_region; i++) {
+        // browse parent's vm space, and copy its trapframe and data segments,
+        // map its code segment.
+        switch (parent->mapped_info[i].seg_type) {
+        case CONTEXT_SEGMENT:
+            *child->trapframe = *parent->trapframe;
+            break;
+        case STACK_SEGMENT:
+            memcpy((void *)lookup_pa(child->pagetable, child->mapped_info[STACK_SEGMENT].va),
+                   (void *)lookup_pa(parent->pagetable, parent->mapped_info[i].va), PGSIZE);
+            break;
+        case HEAP_SEGMENT: { // build a same heap for child process.
+            // copy and map the heap blocks
+            for (uint64 heap_block = current->user_heap.heap_bottom;
+                 heap_block < current->user_heap.heap_top; heap_block += PGSIZE) {
+                pte_t *pte = page_walk(parent->pagetable, heap_block, 0);
+                if (pte && (*pte & PTE_V)) {
+                    uint64 pa = PTE2PA(*pte);
+                    inc_page_ref((void *)pa);
+                    uint64 flags = PTE_FLAGS(*pte);
+                    flags &= ~PTE_W;  // clear the writable bit
+                    flags |= PTE_COW; // set the copy-on-write bit
+                    user_vm_map(child->pagetable, heap_block, PGSIZE, pa, flags | PTE_V);
+                    *pte = PA2PTE(pa) | flags | PTE_V; // update the parent's pte to be copy-on-write as well
+                    flush_tlb();
+                }
+            }
+
+            child->mapped_info[HEAP_SEGMENT].npages = parent->mapped_info[HEAP_SEGMENT].npages;
+
+            // copy the heap manager from parent to child
+            memcpy((void *)&child->user_heap, (void *)&parent->user_heap, sizeof(parent->user_heap));
+            break;
+        }
+        case CODE_SEGMENT:
+            // TODO (lab3_1): implment the mapping of child code segment to parent's
+            // code segment.
+            // hint: the virtual address mapping of code segment is tracked in mapped_info
+            // page of parent's process structure. use the information in mapped_info to
+            // retrieve the virtual to physical mapping of code segment.
+            // after having the mapping information, just map the corresponding virtual
+            // address region of child to the physical pages that actually store the code
+            // segment of parent process.
+            // DO NOT COPY THE PHYSICAL PAGES, JUST MAP THEM.
+
+            for (int j = 0; j < parent->mapped_info[i].npages; j++) {
+                uint64 addr = lookup_pa(parent->pagetable, parent->mapped_info[i].va + j * PGSIZE);
+                map_pages(child->pagetable, parent->mapped_info[i].va + j * PGSIZE, PGSIZE, addr,
+                          prot_to_type(PROT_WRITE | PROT_READ | PROT_EXEC, 1));
+                sprint("do_fork map code segment at pa:%lx of parent to child at va:%lx.\n", addr, parent->mapped_info[i].va + j * PGSIZE);
+            }
+
+            // after mapping, register the vm region (do not delete codes below!)
+            child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
+            child->mapped_info[child->total_mapped_region].npages =
+                parent->mapped_info[i].npages;
+            child->mapped_info[child->total_mapped_region].seg_type = CODE_SEGMENT;
+            child->total_mapped_region++;
+            break;
+        case DATA_SEGMENT:
+            for (int j = 0; j < parent->mapped_info[i].npages; j++) {
+                void *child_pa = alloc_page();
+                uint64 parent_va = parent->mapped_info[i].va + j * PGSIZE;
+                void *parent_pa = (void *)lookup_pa(parent->pagetable, parent_va);
+                memcpy(child_pa, parent_pa, PGSIZE);
+                user_vm_map((pagetable_t)child->pagetable, parent_va, PGSIZE, (uint64)child_pa,
+                            prot_to_type(PROT_WRITE | PROT_READ, 1));
+            }
+
+            child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
+            child->mapped_info[child->total_mapped_region].npages = parent->mapped_info[i].npages;
+            child->mapped_info[child->total_mapped_region].seg_type = DATA_SEGMENT;
+            child->total_mapped_region++;
+            break;
+        }
+    }
+
+    child->status = READY;
+    child->trapframe->regs.a0 = 0;
+    child->parent = parent;
+    insert_to_ready_queue(child);
+
+    return child->pid;
+}
+
+int do_wait(int64 pid) {
+    int has_child = 0;
+    if (pid > 0) {
+        if (pid >= NPROC || procs[pid].parent != current) {
+            // pid大于0但不是当前子进程或不合法
+            return -1;
+        } else {
+            has_child = 1;
+        }
+    } else if (pid == -1) {
+        // pid为-1时
+        for (int i = 0; i < NPROC; i++) {
+            if (procs[i].parent == current && procs[i].status != FREE) {
+                has_child = 1;
+                if (procs[i].status == ZOMBIE) {
+                    // 已结束
+                    procs[i].status = FREE;
+                    return procs[i].pid;
+                }
+                break;
+            }
+        }
+    }
+
+    if (!has_child) {
+        return -1; // 没有子进程
+    }
+
+    current->status = BLOCKED;
+    insert_to_block_queue(&block_queue_head, current);
+
+    schedule();
+    return -1; // 不会执行到这里
 }

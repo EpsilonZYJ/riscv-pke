@@ -104,17 +104,10 @@ void init_proc_pool();
 process *alloc_process();
 // reclaim a process, destruct its vm space and free physical pages.
 int free_process(process *proc);
-// fork a child from parent
-int do_fork(process *parent);
-
-int do_wait(int64 pid);
 
 // current running process
 extern process *current;
 
 extern process *block_queue_head;
-
-void insert_to_block_queue(process *proc);
-process *wake_from_block_queue(process *child_process);
 
 #endif

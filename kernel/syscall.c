@@ -39,7 +39,7 @@ ssize_t sys_user_print(const char *buf, size_t n) {
 ssize_t sys_user_exit(uint64 code) {
     sprint("User exit with code:%d.\n", code);
     // reclaim the current process, and reschedule. added @lab3_1
-    process *tmp = wake_from_block_queue(current);
+    process *tmp = wake_from_block_queue(&block_queue_head, current);
     free_process(current);
     if (tmp == NULL) {
         schedule();
@@ -152,11 +152,10 @@ ssize_t sys_user_sem_V(int semid) {
     }
 }
 
-ssize_t sys_user_printpa(uint64 va)
-{
-  uint64 pa = (uint64)user_va_to_pa((pagetable_t)(current->pagetable), (void*)va);
-  sprint("%lx\n", pa);
-  return 0;
+ssize_t sys_user_printpa(uint64 va) {
+    uint64 pa = (uint64)user_va_to_pa((pagetable_t)(current->pagetable), (void *)va);
+    sprint("%lx\n", pa);
+    return 0;
 }
 
 //
@@ -371,7 +370,7 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
     case SYS_user_ccwd:
         return sys_user_ccwd((char *)a1);
     case SYS_user_printpa:
-      return sys_user_printpa(a1);
+        return sys_user_printpa(a1);
     case SYS_user_sem_new:
         return sys_user_sem_new(a1);
     case SYS_user_sem_P:

@@ -13,4 +13,8 @@ process *remove_from_block_queue(process **pblock_queue_head, process *proc);
 process *pick_and_remove_from_block_queue(process **pblock_queue_head);
 void schedule();
 
+// fork a child from parent
+int do_fork(process *parent);
+int do_wait(int64 pid);
+
 #endif
