@@ -12,6 +12,7 @@
 #include "util/functions.h"
 
 #include "spike_interface/spike_utils.h"
+#include "util/string.h"
 
 //
 // handling the syscalls. will call do_syscall() defined in kernel/syscall.c
@@ -59,6 +60,26 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
         // dynamically increase application stack.
         // hint: first allocate a new physical page, and then, maps the new page to the
         // virtual address that causes the page fault.
+        {
+            pte_t *pte = page_walk(current->pagetable, stval, 0);
+            if (pte && (*pte & PTE_V) && (*pte & PTE_COW)) {
+                uint64 old_pa = PTE2PA(*pte);
+                uint64 new_page = old_pa;
+
+                if (get_page_ref((void *)old_pa) > 1) {
+                    new_page = (uint64)alloc_page();
+                    memcpy((void *)new_page, (void *)old_pa, PGSIZE);
+                    dec_page_ref((void *)old_pa);
+                } else {
+                }
+                uint64 flags = PTE_FLAGS(*pte);
+                flags &= ~PTE_COW;                       // clear the copy-on-write bit
+                flags |= PTE_W;                          // set the writable bit
+                *pte = PA2PTE(new_page) | flags | PTE_V; // update the pte to be writable and not copy-on-write
+                flush_tlb();
+                break;
+            }
+        }
         {
             uint64 new_page = (uint64)alloc_page();
             user_vm_map((pagetable_t)current->pagetable, ROUNDDOWN(stval, PGSIZE), PGSIZE,

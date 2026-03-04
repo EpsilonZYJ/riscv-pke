@@ -38,4 +38,6 @@ int exec(char *command, char *para);
 int read_cwd(char *path);
 int change_cwd(const char *path);
 
+void printpa(int* va);
+
 #endif
