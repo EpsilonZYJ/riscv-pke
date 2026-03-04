@@ -76,6 +76,8 @@ USER_SEMA_CPPS		:= user/app_semaphore.c user/user_lib.c
 
 USER_WAIT_CPPS		:= user/app_wait.c user/user_lib.c
 
+USER_SUM_CPPS		:= user/app_sum_sequence.c user/user_lib.c
+
 #--
 
 USER_SHELL_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SHELL_CPPS)))
@@ -90,6 +92,8 @@ USER_SEMA_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SEMA_CPPS
 
 USER_WAIT_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_WAIT_CPPS)))
 
+USER_SUM_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SUM_CPPS)))
+
 #--
 
 USER_SHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/app_shell
@@ -103,6 +107,8 @@ USER_COW_TARGET		:= $(HOSTFS_ROOT)/bin/app_cow
 USER_SEMA_TARGET	:= $(HOSTFS_ROOT)/bin/app_semaphore
 
 USER_WAIT_TARGET	:= $(HOSTFS_ROOT)/bin/app_wait
+
+USER_SUM_TARGET	:= $(HOSTFS_ROOT)/bin/app_sum_sequence
 
 #--
 
@@ -147,6 +153,7 @@ $(OBJ_DIR):
 	@-mkdir -p $(dir $(USER_COW_OBJS))
 	@-mkdir -p $(dir $(USER_SEMA_OBJS))
 	@-mkdir -p $(dir $(USER_WAIT_OBJS))
+	@-mkdir -p $(dir $(USER_SUM_OBJS))
 	@-mkdir -p $(dir $(USER_E_OBJS))
 	@-mkdir -p $(dir $(USER_M_OBJS))
 	@-mkdir -p $(dir $(USER_T_OBJS))
@@ -218,6 +225,13 @@ $(USER_WAIT_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_WAIT_OBJS)
 	@echo "User app has been built into" \"$@\"
 	@cp $@ $(OBJ_DIR)
 
+$(USER_SUM_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_SUM_OBJS)
+	@echo "linking" $@	...
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_SUM_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+	@cp $@ $(OBJ_DIR)
+
 $(USER_E_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_E_OBJS)
 	@echo "linking" $@	...
 	-@mkdir -p $(HOSTFS_ROOT)/bin
@@ -253,12 +267,12 @@ $(USER_O_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_O_OBJS)
 
 .DEFAULT_GOAL := $(all)
 
-all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 .PHONY:all
 
-run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 	@echo "********************HUST PKE********************"
-	@echo "********************APP SHELL*******************"
+	@echo "********************APP SHELL*********************"
 	spike $(KERNEL_TARGET) /bin/app_shell
 	@echo "*********************APP EXEC*********************"
 	spike $(KERNEL_TARGET) /bin/app_exec
@@ -270,6 +284,8 @@ run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGE
 	spike $(KERNEL_TARGET) /bin/app_semaphore
 	@echo "*********************APP WAIT*********************"
 	spike $(KERNEL_TARGET) /bin/app_wait
+	@echo "*********************APP SUM**********************"
+	spike $(KERNEL_TARGET) /bin/app_sum_sequence
 
 # need openocd!
 gdb:$(KERNEL_TARGET) $(USER_SHELL_TARGET)
