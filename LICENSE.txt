@@ -8,6 +8,7 @@ Copyright (c) 2021, Zhiyuan Shao (zyshao@hust.edu.cn),
                     Yixin Song (yixinsong@hust.edu.cn),
                     Boyang Li (liboyang_hust@163.com)
                     Guo Li (2925441676@qq.com),
+                    Wenzhuo Liu (mgt@oi-wiki.org)
                    Huazhong University of Science and Technology
                     Liang Shi (lshi@cs.ecnu.edu.cn),
                     Longshan Xu (1981888213@qq.com),
