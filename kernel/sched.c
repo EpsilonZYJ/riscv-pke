@@ -194,6 +194,8 @@ int do_fork(process *parent) {
 
             // copy the heap manager from parent to child
             memcpy((void *)&child->user_heap, (void *)&parent->user_heap, sizeof(parent->user_heap));
+            child->user_heap.mem_rib.alloc_list = NULL;
+            child->user_heap.mem_rib.free_list = NULL;
             break;
         }
         case CODE_SEGMENT:

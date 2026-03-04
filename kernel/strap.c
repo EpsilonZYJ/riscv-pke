@@ -70,6 +70,7 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
                     new_page = (uint64)alloc_page();
                     memcpy((void *)new_page, (void *)old_pa, PGSIZE);
                     dec_page_ref((void *)old_pa);
+                    // FIXME: 重建子进程的堆管理器
                 } else {
                 }
                 uint64 flags = PTE_FLAGS(*pte);

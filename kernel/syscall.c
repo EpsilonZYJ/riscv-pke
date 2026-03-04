@@ -62,16 +62,30 @@ ssize_t sys_user_exit(uint64 code) {
             pd *next_item = free_item->next;
             pd *to_free = free_item;
             free_item = free_item->next;
-            uint64 user_va = pa_to_user_va((pagetable_t)current->pagetable, (uint64)to_free);
-            if (user_va != 0) {
-                // 取消映射并释放物理页
-                user_vm_unmap((pagetable_t)current->pagetable, user_va, PGSIZE, 1);
+            if (to_free->size + sizeof(pd) <= PGSIZE) {
+                uint64 user_va = pa_to_user_va((pagetable_t)current->pagetable, (uint64)to_free);
+                if (user_va != 0) {
+                    // 取消映射并释放物理页
+                    user_vm_unmap((pagetable_t)current->pagetable, user_va, PGSIZE, 1);
+                }
             }
             current->user_heap.mem_rib.free_list = free_item;
         }
     }
 
     // FIXME: 可以使用heap_top和heap_bottom来优化释放过程，直接释放整个堆空间，而不需要逐块释放。
+    for (uint64 heap_va = current->user_heap.heap_bottom; heap_va < current->user_heap.heap_top; heap_va += PGSIZE) {
+        pte_t *pte = page_walk((pagetable_t)current->pagetable, heap_va, 0);
+        if (pte && (*pte & PTE_V)) {
+            // 页面已映射，需要释放
+            uint64 pa = PTE2PA(*pte);
+            // 取消映射并释放物理页
+            user_vm_unmap((pagetable_t)current->pagetable, heap_va, PGSIZE, 1);
+        }
+    }
+
+    current->user_heap.mem_rib.alloc_list = NULL;
+    current->user_heap.mem_rib.free_list = NULL;
 
     if (tmp == NULL) {
         schedule();
