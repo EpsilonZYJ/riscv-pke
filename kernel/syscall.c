@@ -45,18 +45,18 @@ ssize_t sys_user_exit(uint64 code) {
     free_process(current);
 
     // 先处理未被free的内存块
-    if (current->mem_rib.alloc_list != NULL) {
-        pd *alloc_item = current->mem_rib.alloc_list;
+    if (current->user_heap.mem_rib.alloc_list != NULL) {
+        pd *alloc_item = current->user_heap.mem_rib.alloc_list;
         while (alloc_item) {
             uint64 alloc_addr = (uint64)(alloc_item) + sizeof(pd);
-            current->mem_rib.free(alloc_addr, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
-            alloc_item = current->mem_rib.alloc_list;
+            current->user_heap.mem_rib.free(alloc_addr, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
+            alloc_item = current->user_heap.mem_rib.alloc_list;
         }
     }
-    sort_free_list_ascend(&current->mem_rib.free_list, pd_first_fit_cmp);
-    merge_free_blocks(&current->mem_rib.free_list, pd_first_fit_cmp);
+    sort_free_list_ascend(&current->user_heap.mem_rib.free_list, pd_first_fit_cmp);
+    merge_free_blocks(&current->user_heap.mem_rib.free_list, pd_first_fit_cmp);
 
-    pd *free_item = current->mem_rib.free_list;
+    pd *free_item = current->user_heap.mem_rib.free_list;
     if (free_item != NULL) {
         while (free_item) {
             pd *next_item = free_item->next;
@@ -67,7 +67,7 @@ ssize_t sys_user_exit(uint64 code) {
                 // 取消映射并释放物理页
                 user_vm_unmap((pagetable_t)current->pagetable, user_va, PGSIZE, 1);
             }
-            current->mem_rib.free_list = free_item;
+            current->user_heap.mem_rib.free_list = free_item;
         }
     }
 
@@ -102,13 +102,13 @@ uint64 sys_user_allocate_mem(int n) {
         uint64 start_pa = 0;
 
         // 尝试从空闲链表找一个起始块
-        if (current->mem_rib.free_list != NULL) {
-            start_block = current->mem_rib.free_list;
+        if (current->user_heap.mem_rib.free_list != NULL) {
+            start_block = current->user_heap.mem_rib.free_list;
             start_pa = (uint64)start_block;
             start_va = pa_to_user_va((pagetable_t)current->pagetable, start_pa);
 
             // 从空闲链表移除这个块
-            current->mem_rib.free_list = start_block->next;
+            current->user_heap.mem_rib.free_list = start_block->next;
         } else {
             // 没有空闲块，分配一个新页作为起点
             void *pa = alloc_page();
@@ -116,10 +116,10 @@ uint64 sys_user_allocate_mem(int n) {
                 return (uint64)NULL;
             }
             start_pa = (uint64)pa;
-            start_va = current->user_heap_top;
+            start_va = current->user_heap.heap_top;
             user_vm_map((pagetable_t)current->pagetable, start_va, PGSIZE, start_pa,
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
-            current->user_heap_top += PGSIZE;
+            current->user_heap.heap_top += PGSIZE;
             start_block = (pd *)start_pa;
         }
 
@@ -141,40 +141,40 @@ uint64 sys_user_allocate_mem(int n) {
                 if (pa == NULL) {
                     return (uint64)NULL;
                 }
-                uint64 va = current->user_heap_top;
+                uint64 va = current->user_heap.heap_top;
                 user_vm_map((pagetable_t)current->pagetable, va, PGSIZE, (uint64)pa,
                             prot_to_type(PROT_WRITE | PROT_READ, 1));
-                current->user_heap_top += PGSIZE;
+                current->user_heap.heap_top += PGSIZE;
             }
         }
 
         // 设置pd结构
         start_block->flag = 1;
         start_block->size = n;
-        start_block->next = current->mem_rib.alloc_list;
-        current->mem_rib.alloc_list = start_block;
+        start_block->next = current->user_heap.mem_rib.alloc_list;
+        current->user_heap.mem_rib.alloc_list = start_block;
 
         return start_va + sizeof(pd);
     }
 
     // 单页内分配
-    uint64 alloc_pa = current->mem_rib.alloc(n, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
+    uint64 alloc_pa = current->user_heap.mem_rib.alloc(n, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
     if (alloc_pa == (uint64)NULL) {
         void *pa = alloc_page();
         if (pa == NULL) {
             return (uint64)NULL;
         }
-        uint64 alloc_va = current->user_heap_top;
+        uint64 alloc_va = current->user_heap.heap_top;
         user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
                     prot_to_type(PROT_WRITE | PROT_READ, 1));
-        current->user_heap_top += PGSIZE;
+        current->user_heap.heap_top += PGSIZE;
         pd *new_free_block = (pd *)pa;
         new_free_block->flag = 0;
         new_free_block->size = PGSIZE - sizeof(pd);
         new_free_block->next = NULL;
-        insert_free_block(&current->mem_rib.free_list, new_free_block, pd_first_fit_cmp);
+        insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block, pd_first_fit_cmp);
 
-        alloc_pa = current->mem_rib.alloc(n, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
+        alloc_pa = current->user_heap.mem_rib.alloc(n, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
         if (alloc_pa == (uint64)NULL) {
             return (uint64)NULL;
         }
@@ -197,7 +197,7 @@ inline uint64 sys_user_allocate_page() {
 uint64 sys_user_free_mem(uint64 va) {
     // user_vm_unmap((pagetable_t)current->pagetable, va, PGSIZE, 1);
     uint64 pa = (uint64)user_va_to_pa((pagetable_t)current->pagetable, (void *)va);
-    current->mem_rib.free(pa, &current->mem_rib.free_list, &current->mem_rib.alloc_list);
+    current->user_heap.mem_rib.free(pa, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
     return 0;
 }
 

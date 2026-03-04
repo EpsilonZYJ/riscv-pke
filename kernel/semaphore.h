@@ -9,9 +9,6 @@
 #include "util/types.h"
 #include "process.h"
 
-// 信号量最大支持数目
-#define NSEMAPHORE 16
-
 typedef ssize_t semid_t;
 
 enum semaphore_status {

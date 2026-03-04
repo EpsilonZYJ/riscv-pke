@@ -6,6 +6,9 @@
 // we use only one HART (cpu) in fundamental experiments
 #define NCPU 1
 
+// 信号量最大支持数目
+#define NSEMAPHORE 16
+
 // interval of timer interrupt. added @lab1_3
 #define TIMER_INTERVAL 1000000
 

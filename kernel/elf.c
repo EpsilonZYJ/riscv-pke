@@ -173,11 +173,12 @@ ssize_t do_exec(char *command, char *para) {
     }
     flush_tlb();
 
-    current->mem_rib.alloc_list = NULL;
-    current->mem_rib.free_list = NULL;
-    current->mem_rib.alloc = ALLOC_FUNC;
-    current->mem_rib.free = FREE_FUNC;
-    current->user_heap_top = USER_FREE_ADDRESS_START;
+    current->user_heap.mem_rib.alloc_list = NULL;
+    current->user_heap.mem_rib.free_list = NULL;
+    current->user_heap.mem_rib.alloc = ALLOC_FUNC;
+    current->user_heap.mem_rib.free = FREE_FUNC;
+    current->user_heap.heap_top = USER_FREE_ADDRESS_START;
+    current->user_heap.heap_bottom = USER_FREE_ADDRESS_START;
 
     void *new_stack_page = alloc_page();
     user_vm_map(current->pagetable, USER_STACK_TOP - PGSIZE, PGSIZE, (uint64)new_stack_page, prot_to_type(PROT_READ | PROT_WRITE, 1));

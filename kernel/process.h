@@ -63,18 +63,12 @@ typedef struct mapped_region {
     uint32 seg_type; // segment type, one of the segment_types
 } mapped_region;
 
-// typedef struct process_heap_manager {
-//     // points to the last free page in our simple heap.
-//     uint64 heap_top;
-//     // points to the bottom of our simple heap.
-//     uint64 heap_bottom;
-//
-//     // the address of free pages in the heap
-//     uint64 free_pages_address[MAX_HEAP_PAGES];
-//     // the number of free pages in the heap
-//     uint32 free_pages_count;
-// } process_heap_manager;
-//
+typedef struct process_heap_manager {
+    uint64 heap_top;
+    uint64 heap_bottom;
+    m_rib mem_rib; // 内存管理信息
+} process_heap_manager;
+
 // the extremely simple definition of process, used for begining labs of PKE
 typedef struct process_t {
     // pointing to the stack used in trap handling.
@@ -84,16 +78,12 @@ typedef struct process_t {
     // trapframe storing the context of a (User mode) process.
     trapframe *trapframe;
 
-    m_rib mem_rib;        // 内存管理信息
-    uint64 user_heap_top; // 堆顶，以字节为单位，用于分配小内存块，added @lab2_c
+    process_heap_manager user_heap; // 堆管理器
 
     // points to a page that contains mapped_regions. below are added @lab3_1
     mapped_region *mapped_info;
     // next free mapped region in mapped_info
     int total_mapped_region;
-
-    // heap management
-    // process_heap_manager user_heap; // 用于分配大内存块
 
     // process id
     uint64 pid;
