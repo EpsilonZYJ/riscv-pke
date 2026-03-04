@@ -71,6 +71,8 @@ ssize_t sys_user_exit(uint64 code) {
         }
     }
 
+    // FIXME: 可以使用heap_top和heap_bottom来优化释放过程，直接释放整个堆空间，而不需要逐块释放。
+
     if (tmp == NULL) {
         schedule();
         return 0;
@@ -115,6 +117,7 @@ uint64 sys_user_allocate_mem(int n) {
             if (pa == NULL) {
                 return (uint64)NULL;
             }
+            current->mapped_info[HEAP_SEGMENT].npages++;
             start_pa = (uint64)pa;
             start_va = current->user_heap.heap_top;
             user_vm_map((pagetable_t)current->pagetable, start_va, PGSIZE, start_pa,
@@ -130,17 +133,19 @@ uint64 sys_user_allocate_mem(int n) {
 
         // 总共需要的空间
         uint64 total_needed = sizeof(pd) + n;
+        uint64 extra_pages = 0;
 
         // 如果第一个页面不够，分配额外页面
         if (total_needed > available_in_first_page) {
             uint64 remaining = total_needed - available_in_first_page;
-            uint64 extra_pages = (remaining + PGSIZE - 1) / PGSIZE;
+            extra_pages = (remaining + PGSIZE - 1) / PGSIZE;
 
             for (uint64 i = 0; i < extra_pages; i++) {
                 void *pa = alloc_page();
                 if (pa == NULL) {
                     return (uint64)NULL;
                 }
+                current->mapped_info[HEAP_SEGMENT].npages++;
                 uint64 va = current->user_heap.heap_top;
                 user_vm_map((pagetable_t)current->pagetable, va, PGSIZE, (uint64)pa,
                             prot_to_type(PROT_WRITE | PROT_READ, 1));
@@ -150,7 +155,7 @@ uint64 sys_user_allocate_mem(int n) {
 
         // 设置pd结构
         start_block->flag = 1;
-        start_block->size = n;
+        start_block->size = available_in_first_page + extra_pages * PGSIZE - sizeof(pd);
         start_block->next = current->user_heap.mem_rib.alloc_list;
         current->user_heap.mem_rib.alloc_list = start_block;
 
@@ -164,6 +169,7 @@ uint64 sys_user_allocate_mem(int n) {
         if (pa == NULL) {
             return (uint64)NULL;
         }
+        current->mapped_info[HEAP_SEGMENT].npages++;
         uint64 alloc_va = current->user_heap.heap_top;
         user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
                     prot_to_type(PROT_WRITE | PROT_READ, 1));
@@ -221,7 +227,7 @@ ssize_t sys_user_fork() {
 // kerenl entry point of yield. added @lab3_2
 //
 ssize_t sys_user_yield() {
-    // TODO (lab3_2): implment the syscall of yield.
+    // (lab3_2): implment the syscall of yield.
     // hint: the functionality of yield is to give up the processor. therefore,
     // we should set the status of currently running process to READY, insert it in
     // the rear of ready queue, and finally, schedule a READY process to run.

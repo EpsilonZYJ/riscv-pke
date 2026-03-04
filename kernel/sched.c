@@ -173,8 +173,8 @@ int do_fork(process *parent) {
             break;
         case HEAP_SEGMENT: { // build a same heap for child process.
             // copy and map the heap blocks
-            for (uint64 heap_block = current->user_heap.heap_bottom;
-                 heap_block < current->user_heap.heap_top; heap_block += PGSIZE) {
+            for (uint64 heap_block = parent->user_heap.heap_bottom;
+                 heap_block < parent->user_heap.heap_top; heap_block += PGSIZE) {
                 pte_t *pte = page_walk(parent->pagetable, heap_block, 0);
                 if (pte && (*pte & PTE_V)) {
                     uint64 pa = PTE2PA(*pte);
@@ -189,13 +189,15 @@ int do_fork(process *parent) {
             }
 
             child->mapped_info[HEAP_SEGMENT].npages = parent->mapped_info[HEAP_SEGMENT].npages;
+            child->mapped_info[HEAP_SEGMENT].seg_type = HEAP_SEGMENT;
+            child->mapped_info[HEAP_SEGMENT].va = parent->mapped_info[HEAP_SEGMENT].va;
 
             // copy the heap manager from parent to child
             memcpy((void *)&child->user_heap, (void *)&parent->user_heap, sizeof(parent->user_heap));
             break;
         }
         case CODE_SEGMENT:
-            // TODO (lab3_1): implment the mapping of child code segment to parent's
+            // (lab3_1): implment the mapping of child code segment to parent's
             // code segment.
             // hint: the virtual address mapping of code segment is tracked in mapped_info
             // page of parent's process structure. use the information in mapped_info to

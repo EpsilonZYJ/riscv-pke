@@ -486,7 +486,7 @@ struct vinode *rfs_create(struct vinode *parent, struct dentry *sub_dentry) {
 
     // initialize the states of the file being created
 
-    // TODO (lab4_1): implement the code for populating the disk inode (free_dinode)
+    // (lab4_1): implement the code for populating the disk inode (free_dinode)
     // of a new file being created.
     // hint:  members of free_dinode to be filled are:
     // size, should be zero for a new file.
@@ -580,7 +580,7 @@ int rfs_disk_stat(struct vinode *vinode, struct istat *istat) {
 // create a hard link under a direntry "parent" for an existing file of "link_node"
 //
 int rfs_link(struct vinode *parent, struct dentry *sub_dentry, struct vinode *link_node) {
-    // TODO (lab4_3): we now need to establish a hard link to an existing file whose vfs
+    // (lab4_3): we now need to establish a hard link to an existing file whose vfs
     // inode is "link_node". To do that, we need first to know the name of the new (link)
     // file, and then, we need to increase the link count of the existing file. Lastly,
     // we need to make the changes persistent to disk. To know the name of the new (link)
@@ -792,7 +792,7 @@ int rfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset) {
         (struct rfs_dir_cache *)dir_vinode->i_fs_info;
     struct rfs_direntry *p_direntry = dir_cache->dir_base_addr + direntry_index;
 
-    // TODO (lab4_2): implement the code to read a directory entry.
+    // (lab4_2): implement the code to read a directory entry.
     // hint: in the above code, we had found the directory entry that located at the
     // *offset, and used p_direntry to point it.
     // in the remaining processing, we need to return our discovery.
