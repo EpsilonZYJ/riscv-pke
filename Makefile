@@ -211,7 +211,7 @@ $(USER_SEMA_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_SEMA_OBJS)
 	@echo "User app has been built into" \"$@\"
 	@cp $@ $(OBJ_DIR)
 
-$(USER_SEMA_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_WAIT_OBJS)
+$(USER_WAIT_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_WAIT_OBJS)
 	@echo "linking" $@	...
 	-@mkdir -p $(HOSTFS_ROOT)/bin
 	@$(COMPILE) --entry=main $(USER_WAIT_OBJS) $(UTIL_LIB) -o $@
