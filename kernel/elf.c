@@ -5,6 +5,7 @@
 
 #include "elf.h"
 
+#include "debug_config.h"
 #include "memlayout.h"
 #include "string.h"
 #include "riscv.h"

@@ -1,0 +1,12 @@
+//
+// Created by 周煜杰 on 2026/3/5.
+//
+
+#ifndef RISCV_PKE_DEBUG_CONFIG_H
+#define RISCV_PKE_DEBUG_CONFIG_H
+
+// #define SYS_USER_PRINT_BACKTRACE_DEBUG
+// #define ELF_LOAD_SYMBOL_TABLE_DEBUG
+// #define MEM_DEBUG
+
+#endif // RISCV_PKE_DEBUG_H

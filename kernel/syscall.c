@@ -18,6 +18,7 @@
 #include "spike_interface/spike_utils.h"
 #include "kernel/semaphore.h"
 #include "semaphore.h"
+#include "debug_config.h"
 
 #include "elf.h"
 
@@ -506,32 +507,44 @@ ssize_t sys_user_print_backtrace(int depth) {
     }
 
     // 当前的栈帧指针
-    uint64 *cur_fp;
+    uint64 *cur_fp_va, *cur_fp_pa;
     // 当前的返回函数地址
-    uint64 cur_ra;
+    uint64 cur_ra_va, cur_ra_pa;
     // 当前栈帧的基址指针
-    uint64 *cur_sb = (uint64 *)current->trapframe->regs.sp;
+    uint64 *cur_sb_va = (uint64 *)current->trapframe->regs.sp;
+    uint64 *cur_sb_pa;
     // 先从print_backtrace中跳出
-    cur_fp = (uint64 *)((uint64)cur_sb + 32); // 到上一个函数的调用栈栈底
-    cur_sb = (uint64 *)((uint64)cur_fp + 8);  // 上一个函数调用栈的基址
-    cur_ra = *cur_sb;                         // 到调用print_backtrace的返回地址
+    cur_fp_va = (uint64 *)((uint64)cur_sb_va + 32); // 到上一个函数的调用栈栈底
+    cur_sb_va = (uint64 *)((uint64)cur_fp_va + 8);  // 上一个函数调用栈的基址
+    cur_sb_pa = (uint64 *)user_va_to_pa(current->pagetable, (void *)cur_sb_va);
+    cur_ra_va = *cur_sb_pa; // 到调用print_backtrace的返回地址
 
 #ifdef SYS_USER_PRINT_BACKTRACE_DEBUG
     sprint("=====================================\n");
-    for (int i = 64; i >= -64; i--) {
+    for (int i = 17; i >= -64; i--) {
         if (!i)
             sprint("-> ");
         else
             sprint("   ");
-        sprint("Stack dump [0x%016lx]: 0x%016lx\n", current->trapframe->regs.sp + 32 + i * sizeof(uint64), *(uint64 *)(current->trapframe->regs.sp + 32 + i * sizeof(uint64)));
+        // sprint("Stack dump [0x%016lx]: 0x%016lx\n", current->trapframe->regs.sp + 32 + i * sizeof(uint64), *(uint64 *)(current->trapframe->regs.sp + 32 + i * sizeof(uint64)));
+        uint64 addr = (uint64)user_va_to_pa(current->pagetable, (void *)(current->trapframe->regs.sp + 32 + i * sizeof(uint64)));
+        sprint("Stack dump [0x%016lx]: 0x%016lx", current->trapframe->regs.sp + 32 + i * sizeof(uint64), *(uint64 *)(addr));
+        const char *func_name = elf_find_symbol_by_addr(addr);
+        if (func_name) {
+            sprint(" <%s>", func_name);
+        } else {
+            sprint(" <unknown>");
+        }
+        sprint("\n");
     }
     sprint("=====================================\n");
 #endif
 
     while (depth > 0) {
-        const char *func_name = elf_find_symbol_by_addr(cur_ra);
+        cur_ra_pa = (uint64)user_va_to_pa(current->pagetable, (void *)cur_ra_va);
+        const char *func_name = elf_find_symbol_by_addr(cur_ra_va);
         if (func_name == NULL) {
-            sprint("  [0x%016lx]j <unknown>\n", cur_ra);
+            sprint("  [0x%016lx]j <unknown>\n", cur_ra_va);
             return ENXIO;
         } else if (strcmp(func_name, "main") == 0) {
             sprint("%s\n", func_name);
@@ -539,9 +552,11 @@ ssize_t sys_user_print_backtrace(int depth) {
         } else {
             sprint("%s\n", func_name);
             depth--;
-            cur_sb = (uint64 *)((uint64)(*cur_fp) - 8); // 到调用函数的栈帧基址
-            cur_ra = *cur_sb;                           // 到调用函数的返回地址
-            cur_fp = (uint64 *)((uint64)cur_sb - 8);    // 更新栈帧指针
+            cur_fp_pa = user_va_to_pa(current->pagetable, (void *)cur_fp_va);
+            cur_sb_va = (uint64 *)((uint64)(*cur_fp_pa) - 8); // 到调用函数的栈帧基址
+            cur_sb_pa = (uint64 *)user_va_to_pa(current->pagetable, (void *)cur_sb_va);
+            cur_ra_va = *cur_sb_pa;                        // 到调用函数的返回地址
+            cur_fp_va = (uint64 *)((uint64)cur_sb_va - 8); // 更新栈帧指针
         }
     }
 
