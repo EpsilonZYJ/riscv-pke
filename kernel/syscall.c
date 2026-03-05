@@ -225,15 +225,15 @@ uint64 sys_user_allocate_mem(int n) {
             user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
             current->user_heap.heap_top += PGSIZE;
-            pd *new_free_block = (pd *)user_va_to_pa(current->pagetable, (void *)alloc_va);
+            // pd *new_free_block = (pd *)user_va_to_pa(current->pagetable, (void *)alloc_va);
+            pd *new_free_block = (void *)alloc_va;
 #ifdef MEM_DEBUG
             sprint("new free block at va: %lx, pa: %lx\n", alloc_va, user_va_to_pa(current->pagetable, (void *)alloc_va));
 #endif
-            new_free_block->flag = 0;
-            new_free_block->size = PGSIZE - sizeof(pd);
-            new_free_block->next = NULL;
-            pd *new_free_block_va = (pd *)alloc_va;
-            insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block_va, PD_CMP_FUNC);
+            set_flag(new_free_block, 0);
+            set_size(new_free_block, PGSIZE - sizeof(pd));
+            set_next(new_free_block, NULL);
+            insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block, PD_CMP_FUNC);
             alloc_va = current->user_heap.mem_rib.alloc(n, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
             if (alloc_va != (uint64)NULL) {
                 return alloc_va + sizeof(pd);
@@ -277,8 +277,8 @@ uint64 sys_user_allocate_mem(int n) {
             user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
             current->user_heap.heap_top += PGSIZE;
-            start_va = (uint64)user_va_to_pa(current->pagetable, (void *)alloc_va);
-            ((pd *)start_va)->size = PGSIZE - sizeof(pd);
+            start_va = alloc_va;
+            set_size((pd *)start_va, PGSIZE - sizeof(pd));
             n = n - (PGSIZE - sizeof(pd));
             start_va = alloc_va;
         }
@@ -287,9 +287,8 @@ uint64 sys_user_allocate_mem(int n) {
             void *pa = alloc_page();
             if (pa == NULL) {
                 pd *new_alloc_block = (pd *)start_va;
-                new_alloc_block->flag = 0;
-                new_alloc_block->size = (i - 1) * PGSIZE + ((pd *)start_va)->size;
-                new_alloc_block = (pd *)pa_to_user_va(current->pagetable, (uint64)new_alloc_block);
+                set_flag(new_alloc_block, 0);
+                set_size(new_alloc_block, (i - 1) * PGSIZE + ((pd *)start_va)->size);
                 insert_free_block(&current->user_heap.mem_rib.free_list, new_alloc_block, PD_CMP_FUNC);
 
                 return (uint64)NULL;
@@ -305,9 +304,8 @@ uint64 sys_user_allocate_mem(int n) {
             void *pa = alloc_page();
             if (pa == NULL) {
                 pd *new_alloc_block = (pd *)start_va;
-                new_alloc_block->flag = 0;
-                new_alloc_block->size = (i - 1) * PGSIZE + ((pd *)start_va)->size;
-                new_alloc_block = (pd *)pa_to_user_va(current->pagetable, (uint64)new_alloc_block);
+                set_flag(new_alloc_block, 0);
+                set_size(new_alloc_block, (i - 1) * PGSIZE + ((pd *)start_va)->size);
                 insert_free_block(&current->user_heap.mem_rib.free_list, new_alloc_block, PD_CMP_FUNC);
 
                 return (uint64)NULL;
@@ -318,19 +316,16 @@ uint64 sys_user_allocate_mem(int n) {
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
             current->user_heap.heap_top += PGSIZE;
             uint64 free_va = alloc_va + n - i * PGSIZE;
-            pd *new_free_block = (pd *)user_va_to_pa(current->pagetable, (void *)free_va);
-            new_free_block->flag = 0;
-            new_free_block->size = PGSIZE - (n - i * PGSIZE) - sizeof(pd);
-            new_free_block->next = NULL;
-            new_free_block = (pd *)pa_to_user_va(current->pagetable, (uint64)new_free_block);
+            pd *new_free_block = (pd *)free_va;
+            set_flag(new_free_block, 0);
+            set_size(new_free_block, PGSIZE - (n - i * PGSIZE) - sizeof(pd));
+            set_next(new_free_block, NULL);
             insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block, PD_CMP_FUNC);
         }
         pd *new_alloc_block = (pd *)start_va;
-        new_alloc_block->flag = 1;
-        new_alloc_block->size = original_n;
-        new_alloc_block = (pd *)pa_to_user_va(current->pagetable, (uint64)new_alloc_block);
+        set_flag(new_alloc_block, 1);
+        set_size(new_alloc_block, original_n);
         insert_alloc_block(&current->user_heap.mem_rib.alloc_list, new_alloc_block);
-        // start_va = pa_to_user_va(current->pagetable, start_va);
         return start_va + sizeof(pd);
     }
 }

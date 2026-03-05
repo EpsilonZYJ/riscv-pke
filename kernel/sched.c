@@ -195,6 +195,7 @@ int do_fork(process *parent) {
             // copy the heap manager from parent to child.
             // NOTE: keep copied lists, COW page fault handler will remap list pointers
             // from old physical page to new copied page when needed.
+            memcpy((void *)&child->user_heap, (void *)&parent->user_heap, sizeof(parent->user_heap));
             break;
         }
         case CODE_SEGMENT:
