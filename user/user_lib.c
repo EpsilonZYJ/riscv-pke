@@ -10,7 +10,7 @@
 #include "util/snprintf.h"
 #include "kernel/syscall.h"
 
-int do_user_call(uint64 sysnum, uint64 a1, uint64 a2, uint64 a3, uint64 a4, uint64 a5, uint64 a6,
+uint64 do_user_call(uint64 sysnum, uint64 a1, uint64 a2, uint64 a3, uint64 a4, uint64 a5, uint64 a6,
                     uint64 a7) {
     int ret;
 
@@ -185,19 +185,18 @@ int exec(char *command, char *exec) {
 // lib call to read present working directory (pwd)
 //
 int read_cwd(char *path) {
-  return do_user_call(SYS_user_rcwd, (uint64)path, 0, 0, 0, 0, 0, 0);
+    return do_user_call(SYS_user_rcwd, (uint64)path, 0, 0, 0, 0, 0, 0);
 }
 
 //
 // lib call to change pwd
 //
 int change_cwd(const char *path) {
-  return do_user_call(SYS_user_ccwd, (uint64)path, 0, 0, 0, 0, 0, 0);
+    return do_user_call(SYS_user_ccwd, (uint64)path, 0, 0, 0, 0, 0, 0);
 }
 
-void printpa(int* va)
-{
-  do_user_call(SYS_user_printpa, (uint64)va, 0, 0, 0, 0, 0, 0);
+void printpa(int *va) {
+    do_user_call(SYS_user_printpa, (uint64)va, 0, 0, 0, 0, 0, 0);
 }
 
 // lib call to sem_new
@@ -217,14 +216,14 @@ void sem_V(int sem_id) {
 //
 // lib call to better_malloc
 //
-void* better_malloc(int n) {
-    return (void*)do_user_call(SYS_user_allocate_mem, n, 0, 0, 0, 0, 0, 0);
+void *better_malloc(int n) {
+    return (void *)do_user_call(SYS_user_allocate_mem, n, 0, 0, 0, 0, 0, 0);
 }
 
 //
 // lib call to better_free
 //
-void better_free(void* va) {
+void better_free(void *va) {
     do_user_call(SYS_user_free_mem, (uint64)va, 0, 0, 0, 0, 0, 0);
 }
 
