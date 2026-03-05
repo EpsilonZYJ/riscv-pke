@@ -10,7 +10,7 @@
 #include "util/snprintf.h"
 #include "kernel/syscall.h"
 
-uint64 do_user_call(uint64 sysnum, uint64 a1, uint64 a2, uint64 a3, uint64 a4, uint64 a5, uint64 a6,
+int do_user_call(uint64 sysnum, uint64 a1, uint64 a2, uint64 a3, uint64 a4, uint64 a5, uint64 a6,
                     uint64 a7) {
     int ret;
 
@@ -226,4 +226,17 @@ void* better_malloc(int n) {
 //
 void better_free(void* va) {
     do_user_call(SYS_user_free_mem, (uint64)va, 0, 0, 0, 0, 0, 0);
+}
+
+/**
+ * @brief 实现打印函数调用栈的功能
+ *
+ * @version 0.1
+ * @author EpsilonZYJ (yujie.zhou05@outlook.com)
+ * @date 2025-10-20
+ * @copyright Copyright (c) 2025
+ */
+
+int print_backtrace(int depth) {
+    return do_user_call(SYS_user_print_backtrace, depth, 0, 0, 0, 0, 0, 0);
 }

@@ -38,6 +38,7 @@ int link_u(const char *fn1, const char *fn2);
 int unlink_u(const char *fn);
 void* better_malloc(int n);
 void better_free(void* va);
+int print_backtrace(int depth);
 
 int wait(int pid);
 int exec(char *command, char *para);

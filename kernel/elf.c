@@ -132,6 +132,21 @@ void load_bincode_from_host_elf(process *p, char *filename) {
     // load elf. elf_load() is defined above.
     if (elf_load(&elfloader) != EL_OK) panic("Fail on loading elf.\n");
 
+    // 加载符号表
+    elf_status symtab_load_status = elf_load_symbol_table(&elfloader);
+    switch (symtab_load_status) {
+    case EL_OK: break;
+    case EL_EIO:
+        sprint("I/O error when loading symbol table from ELF.\n");
+        break;
+    case EL_ERR:
+        sprint("Error when loading symbol table from ELF.\n");
+        break;
+    default:
+        sprint("Unknown error when loading symbol table from ELF.\n");
+        break;
+    }
+
     // entry (virtual, also physical in lab1_x) address
     p->trapframe->epc = elfloader.ehdr.entry;
 
@@ -225,4 +240,109 @@ ssize_t do_exec(char *command, char *para) {
     flush_tlb();
 
     return 0;
+}
+
+static symbol_table g_symtab;
+
+/**
+ * @brief 从ELF文件中加载符号表到静态内存g_symtab中
+ *
+ * @param ctx elf上下文
+ * @return elf_status 加载状态
+ * @version 0.1
+ * @author EpsilonZYJ (yujie.zhou05@outlook.com)
+ * @date 2025-10-24
+ * @copyright Copyright (c) 2025
+ */
+elf_status elf_load_symbol_table(elf_ctx *ctx) {
+    elf_sec_header sh_symtab;
+    int i, off;
+    int found = 0;
+    for (i = 0, off = ctx->ehdr.shoff; i < ctx->ehdr.shnum; i++, off += sizeof(sh_symtab)) {
+        // 读取节头
+        if (elf_fpread(ctx, (void *)&sh_symtab, sizeof(sh_symtab), off) != sizeof(sh_symtab))
+            return EL_EIO;
+
+        if (sh_symtab.sh_type == SHT_SYMTAB) {
+            // 找到符号表
+            found = 1;
+            break;
+        }
+    }
+
+    if (!found || sh_symtab.sh_size == 0) {
+        sprint("No symbol table found in ELF.\n");
+        return EL_ERR;
+    }
+
+    // 读取符号表内容
+    uint64 symtab_addr = sh_symtab.sh_offset;
+    uint64 symtab_size = sh_symtab.sh_size;
+    uint32 num_symbols = symtab_size / sizeof(elf_symbol_rec);
+    if (num_symbols > MAX_SYMBOLS) {
+        sprint("Symbol table too large: %u symbols.\n", num_symbols);
+        return EL_ERR;
+    }
+    if (elf_fpread(ctx, (void *)g_symtab.symbols, symtab_size, symtab_addr) != symtab_size)
+        return EL_EIO;
+    g_symtab.symbol_count = num_symbols;
+
+    // 读取字符串表节头
+    uint64 sh_strtab_addr = ctx->ehdr.shoff + (sh_symtab.sh_link * ctx->ehdr.shentsize);
+    elf_sec_header sh_strtab;
+    if (elf_fpread(ctx, (void *)&sh_strtab, sizeof(sh_strtab), sh_strtab_addr) != sizeof(sh_strtab))
+        return EL_EIO;
+    if (sh_strtab.sh_type != SHT_STRTAB) {
+        sprint("Invalid string table section.\n");
+        return EL_ERR;
+    }
+    if (sh_strtab.sh_size > MAX_STRTAB_SIZE) {
+        sprint("String table too large: %lu bytes.\n", sh_strtab.sh_size);
+        return EL_ERR;
+    }
+
+    // 读取字符串表内容
+    if (elf_fpread(ctx, (void *)g_symtab.str_table, sh_strtab.sh_size, sh_strtab.sh_offset) != sh_strtab.sh_size)
+        return EL_EIO;
+    g_symtab.str_table_size = sh_strtab.sh_size;
+
+#ifdef ELF_LOAD_SYMBOL_TABLE_DEBUG
+    for (int i = 0; i < g_symtab.symbol_count; i++) {
+        sprint("Loaded symbol: %s \t at 0x%lx, max addr 0x%lx\n", &g_symtab.str_table[g_symtab.symbols[i].st_name], g_symtab.symbols[i].st_value, g_symtab.symbols[i].st_value + g_symtab.symbols[i].st_size);
+    }
+#endif
+
+    return EL_OK;
+}
+
+/**
+ * @brief 根据地址查找符号名称
+ *
+ * @param addr 地址
+ * @return const char* 符号名称
+ * @version 0.1
+ * @author EpsilonZYJ (yujie.zhou05@outlook.com)
+ * @date 2025-10-24
+ * @copyright Copyright (c) 2025
+ */
+const char *elf_find_symbol_by_addr(uint64 addr) {
+    for (int i = 0; i < g_symtab.symbol_count; i++) {
+        elf_symbol_rec *sym = &g_symtab.symbols[i];
+        // 如果不是函数类型符号，跳过
+        if (ELF_ST_TYPE(sym->st_info) != STT_FUNC) continue;
+
+        if (sym->st_name > g_symtab.str_table_size) {
+            sprint("Invalid symbol name offset: %u\n", sym->st_name);
+            sprint("ELF inconsistency detected!\n");
+            return NULL;
+        }
+
+        // 由于调用栈中压入的地址是返回地址，该地址在函数范围内
+        // 因此这里不能直接查找是否是某个函数的入口地址
+        // 正确方式是查找返回地址是否在函数范围内（函数体内的某个地址）
+        if (addr >= sym->st_value && addr < sym->st_value + sym->st_size) {
+            return &g_symtab.str_table[sym->st_name];
+        }
+    }
+    return NULL;
 }

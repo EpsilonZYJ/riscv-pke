@@ -21,7 +21,7 @@ ifneq (,)
   mabi := -mabi=$(if $(is_32bit),ilp32,lp64)
 endif
 
-CFLAGS        := -Wall -Werror  -fno-builtin -nostdlib -D__NO_INLINE__ -mcmodel=medany -g -Og -std=gnu99 -Wno-unused -Wno-attributes -fno-delete-null-pointer-checks -fno-PIE $(march)
+CFLAGS        := -Wall -Werror  -fno-builtin -nostdlib -D__NO_INLINE__ -mcmodel=medany -g -Og -std=gnu99 -Wno-unused -Wno-attributes -fno-delete-null-pointer-checks -fno-PIE $(march) -fno-omit-frame-pointer
 COMPILE       	:= $(CC) -MMD -MP $(CFLAGS) $(SPROJS_INCLUDE)
 
 #---------------------	utils -----------------------
@@ -80,6 +80,8 @@ USER_SUM_CPPS		:= user/app_sum_sequence.c user/user_lib.c
 
 USER_SING_CPPS		:= user/app_singlepageheap.c user/user_lib.c
 
+USER_PRINT_CPPS		:= user/app_print_backtrace.c user/user_lib.c
+
 #--
 
 USER_SHELL_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SHELL_CPPS)))
@@ -98,6 +100,8 @@ USER_SUM_OBJS  		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SUM_CPPS)
 
 USER_SING_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SING_CPPS)))
 
+USER_PRINT_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_PRINT_CPPS)))
+
 #--
 
 USER_SHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/app_shell
@@ -115,6 +119,8 @@ USER_WAIT_TARGET	:= $(HOSTFS_ROOT)/bin/app_wait
 USER_SUM_TARGET		:= $(HOSTFS_ROOT)/bin/app_sum_sequence
 
 USER_SING_TARGET	:= $(HOSTFS_ROOT)/bin/app_singlepageheap
+
+USER_PRINT_TARGET	:= $(HOSTFS_ROOT)/bin/app_print_backtrace
 
 #--
 
@@ -161,6 +167,7 @@ $(OBJ_DIR):
 	@-mkdir -p $(dir $(USER_WAIT_OBJS))
 	@-mkdir -p $(dir $(USER_SUM_OBJS))
 	@-mkdir -p $(dir $(USER_SING_OBJS))
+	@-mkdir -p $(dir $(USER_PRINT_OBJS))
 	@-mkdir -p $(dir $(USER_E_OBJS))
 	@-mkdir -p $(dir $(USER_M_OBJS))
 	@-mkdir -p $(dir $(USER_T_OBJS))
@@ -246,6 +253,13 @@ $(USER_SING_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_SING_OBJS)
 	@echo "User app has been built into" \"$@\"
 	@cp $@ $(OBJ_DIR)
 
+$(USER_PRINT_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_PRINT_OBJS)
+	@echo "linking" $@	...
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_PRINT_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+	@cp $@ $(OBJ_DIR)
+
 $(USER_E_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_E_OBJS)
 	@echo "linking" $@	...
 	-@mkdir -p $(HOSTFS_ROOT)/bin
@@ -281,10 +295,10 @@ $(USER_O_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_O_OBJS)
 
 .DEFAULT_GOAL := $(all)
 
-all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_PRINT_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 .PHONY:all
 
-run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_PRINT_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 	@echo "********************HUST PKE********************"
 	@echo "********************APP SHELL*********************"
 	spike $(KERNEL_TARGET) /bin/app_shell
@@ -302,6 +316,8 @@ run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGE
 	spike $(KERNEL_TARGET) /bin/app_sum_sequence
 	@echo "*********************APP SING*********************"
 	spike $(KERNEL_TARGET) /bin/app_singlepageheap
+	@echo "********************APP PRINT*********************"
+	spike $(KERNEL_TARGET) /bin/app_print_backtrace
 
 # need openocd!
 gdb:$(KERNEL_TARGET) $(USER_SHELL_TARGET)
