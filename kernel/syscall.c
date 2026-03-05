@@ -254,7 +254,7 @@ uint64 sys_user_allocate_mem(int n) {
 
         // 没有大块，从当前虚拟地址最大的位置开始分配连续的页
         pd *highest_block = NULL;
-        for (pd *block = current->user_heap.mem_rib.free_list; block != NULL; block = block->next) {
+        for (pd *block = current->user_heap.mem_rib.free_list; block != NULL; block = get_next(block)) {
             if (highest_block == NULL || (uint64)block > (uint64)highest_block) {
                 highest_block = block;
             }
@@ -265,7 +265,7 @@ uint64 sys_user_allocate_mem(int n) {
             start_va = (uint64)highest_block;
             // 从空闲链表移除这个块
             remove_from_pd_list(&current->user_heap.mem_rib.free_list, highest_block);
-            n = n - highest_block->size;
+            n = n - get_size(highest_block);
         } else {
             // 先分配一页
             void *pa = alloc_page();
@@ -288,7 +288,7 @@ uint64 sys_user_allocate_mem(int n) {
             if (pa == NULL) {
                 pd *new_alloc_block = (pd *)start_va;
                 set_flag(new_alloc_block, 0);
-                set_size(new_alloc_block, (i - 1) * PGSIZE + ((pd *)start_va)->size);
+                set_size(new_alloc_block, (i - 1) * PGSIZE + get_size((pd *)start_va));
                 insert_free_block(&current->user_heap.mem_rib.free_list, new_alloc_block, PD_CMP_FUNC);
 
                 return (uint64)NULL;
@@ -305,7 +305,7 @@ uint64 sys_user_allocate_mem(int n) {
             if (pa == NULL) {
                 pd *new_alloc_block = (pd *)start_va;
                 set_flag(new_alloc_block, 0);
-                set_size(new_alloc_block, (i - 1) * PGSIZE + ((pd *)start_va)->size);
+                set_size(new_alloc_block, (i - 1) * PGSIZE + get_size((pd *)start_va));
                 insert_free_block(&current->user_heap.mem_rib.free_list, new_alloc_block, PD_CMP_FUNC);
 
                 return (uint64)NULL;
