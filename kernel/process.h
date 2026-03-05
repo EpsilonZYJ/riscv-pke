@@ -123,6 +123,12 @@ void insert_alloc_block(pd **p_alloc_list, pd *new_alloc_block);
 void insert_free_block(pd **p_free_list, pd *new_free_block, int (*ascend_cmp)(pd *, pd *));
 void sort_free_list_ascend(pd **plist_head, int (*ascend_cmp)(pd *, pd *));
 void remove_from_pd_list(pd **plist_head, pd *item);
+void set_next(pd *node, pd *next);
+pd *get_next(pd *node);
+void set_flag(pd *node, int flag);
+int get_flag(pd *node);
+void set_size(pd *node, uint64 size);
+uint64 get_size(pd *node);
 
 // 首次适应分配算法
 uint64 first_fit_alloc(uint64 size, pd **p_free_list, pd **p_alloc_list);

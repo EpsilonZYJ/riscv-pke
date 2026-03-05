@@ -48,7 +48,7 @@ ssize_t sys_user_exit(uint64 code) {
     if (current->user_heap.mem_rib.alloc_list != NULL) {
         pd *alloc_item = current->user_heap.mem_rib.alloc_list;
         while (alloc_item) {
-            uint64 alloc_addr = (uint64)(alloc_item) + sizeof(pd);
+            uint64 alloc_addr = (uint64)(alloc_item);
             current->user_heap.mem_rib.free(alloc_addr, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
             alloc_item = current->user_heap.mem_rib.alloc_list;
         }
@@ -59,15 +59,12 @@ ssize_t sys_user_exit(uint64 code) {
     pd *free_item = current->user_heap.mem_rib.free_list;
     if (free_item != NULL) {
         while (free_item) {
-            pd *next_item = free_item->next;
+            pd *next_item = get_next(free_item);
             pd *to_free = free_item;
-            free_item = free_item->next;
-            if (to_free->size + sizeof(pd) <= PGSIZE) {
-                uint64 user_va = pa_to_user_va((pagetable_t)current->pagetable, (uint64)to_free);
-                if (user_va != 0) {
-                    // 取消映射并释放物理页
-                    user_vm_unmap((pagetable_t)current->pagetable, user_va, PGSIZE, 1);
-                }
+            free_item = get_next(free_item);
+            if (get_size(to_free) + sizeof(pd) <= PGSIZE) {
+                // 取消映射并释放物理页
+                user_vm_unmap((pagetable_t)current->pagetable, (uint64)to_free, PGSIZE, 1);
             }
             current->user_heap.mem_rib.free_list = free_item;
         }
@@ -209,6 +206,10 @@ uint64 sys_user_allocate_mem(int n) {
         return (uint64)NULL;
     }
     n = ROUNDUP(n, 8); // 8-byte aligned
+#ifdef MEM_DEBUG
+    sprint("sizeof(pd): %d, request size: %d\n", sizeof(pd), n);
+#endif
+
     if (n + sizeof(pd) <= PGSIZE) {
         // 单页内分配
         uint64 alloc_va = current->user_heap.mem_rib.alloc(n, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
@@ -224,12 +225,15 @@ uint64 sys_user_allocate_mem(int n) {
             user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
             current->user_heap.heap_top += PGSIZE;
-            pd *new_free_block = (pd *)alloc_va;
+            pd *new_free_block = (pd *)user_va_to_pa(current->pagetable, (void *)alloc_va);
+#ifdef MEM_DEBUG
+            sprint("new free block at va: %lx, pa: %lx\n", alloc_va, user_va_to_pa(current->pagetable, (void *)alloc_va));
+#endif
             new_free_block->flag = 0;
             new_free_block->size = PGSIZE - sizeof(pd);
             new_free_block->next = NULL;
-            insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block, PD_CMP_FUNC);
-
+            pd *new_free_block_va = (pd *)alloc_va;
+            insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block_va, PD_CMP_FUNC);
             alloc_va = current->user_heap.mem_rib.alloc(n, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
             if (alloc_va != (uint64)NULL) {
                 return alloc_va + sizeof(pd);
@@ -273,9 +277,10 @@ uint64 sys_user_allocate_mem(int n) {
             user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
             current->user_heap.heap_top += PGSIZE;
-            start_va = alloc_va;
+            start_va = (uint64)user_va_to_pa(current->pagetable, (void *)alloc_va);
             ((pd *)start_va)->size = PGSIZE - sizeof(pd);
             n = n - (PGSIZE - sizeof(pd));
+            start_va = alloc_va;
         }
         int i;
         for (i = 0; i * PGSIZE < n; i++) {
@@ -284,6 +289,7 @@ uint64 sys_user_allocate_mem(int n) {
                 pd *new_alloc_block = (pd *)start_va;
                 new_alloc_block->flag = 0;
                 new_alloc_block->size = (i - 1) * PGSIZE + ((pd *)start_va)->size;
+                new_alloc_block = (pd *)pa_to_user_va(current->pagetable, (uint64)new_alloc_block);
                 insert_free_block(&current->user_heap.mem_rib.free_list, new_alloc_block, PD_CMP_FUNC);
 
                 return (uint64)NULL;
@@ -301,6 +307,7 @@ uint64 sys_user_allocate_mem(int n) {
                 pd *new_alloc_block = (pd *)start_va;
                 new_alloc_block->flag = 0;
                 new_alloc_block->size = (i - 1) * PGSIZE + ((pd *)start_va)->size;
+                new_alloc_block = (pd *)pa_to_user_va(current->pagetable, (uint64)new_alloc_block);
                 insert_free_block(&current->user_heap.mem_rib.free_list, new_alloc_block, PD_CMP_FUNC);
 
                 return (uint64)NULL;
@@ -311,16 +318,19 @@ uint64 sys_user_allocate_mem(int n) {
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
             current->user_heap.heap_top += PGSIZE;
             uint64 free_va = alloc_va + n - i * PGSIZE;
-            pd *new_free_block = (pd *)free_va;
+            pd *new_free_block = (pd *)user_va_to_pa(current->pagetable, (void *)free_va);
             new_free_block->flag = 0;
             new_free_block->size = PGSIZE - (n - i * PGSIZE) - sizeof(pd);
             new_free_block->next = NULL;
+            new_free_block = (pd *)pa_to_user_va(current->pagetable, (uint64)new_free_block);
             insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block, PD_CMP_FUNC);
         }
         pd *new_alloc_block = (pd *)start_va;
         new_alloc_block->flag = 1;
         new_alloc_block->size = original_n;
+        new_alloc_block = (pd *)pa_to_user_va(current->pagetable, (uint64)new_alloc_block);
         insert_alloc_block(&current->user_heap.mem_rib.alloc_list, new_alloc_block);
+        // start_va = pa_to_user_va(current->pagetable, start_va);
         return start_va + sizeof(pd);
     }
 }
@@ -347,7 +357,22 @@ inline uint64 sys_user_allocate_page() {
 //
 uint64 sys_user_free_mem(uint64 va) {
     va = va - sizeof(pd);
+#ifdef MEM_DEBUG
+    sprint("=====================\n");
+    sprint("to free at sys_user_free_mem: va: %lx\n", va);
+    for (pd *i = current->user_heap.mem_rib.alloc_list; i != NULL; i = get_next(i)) {
+        sprint("alloc list item: %lx\n", (uint64)i);
+    }
+#endif
     current->user_heap.mem_rib.free(va, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
+#ifdef MEM_DEBUG
+    sprint("after free:\n");
+    for (pd *i = current->user_heap.mem_rib.alloc_list; i != NULL; i = get_next(i)) {
+        sprint("alloc list item: %lx\n", (uint64)i);
+    }
+    sprint("===================\n");
+#endif
+
     return 0;
 }
 

@@ -179,14 +179,50 @@ int free_process(process *proc) {
     return 0;
 }
 
+void set_next(pd *node, pd *next) {
+    if (node == NULL) return;
+    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    node_pa->next = next;
+}
+
+pd *get_next(pd *node) {
+    if (node == NULL) return NULL;
+    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    return node_pa->next;
+}
+
+void set_flag(pd *node, int flag) {
+    if (node == NULL) return;
+    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    node_pa->flag = flag;
+}
+
+int get_flag(pd *node) {
+    if (node == NULL) return -1;
+    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    return node_pa->flag;
+}
+
+void set_size(pd *node, uint64 size) {
+    if (node == NULL) return;
+    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    node_pa->size = size;
+}
+
+uint64 get_size(pd *node) {
+    if (node == NULL) return 0;
+    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    return node_pa->size;
+}
+
 void insert_alloc_block(pd **p_alloc_list, pd *new_alloc_block) {
     if (*p_alloc_list == NULL && new_alloc_block == NULL) return;
     if (*p_alloc_list == NULL && new_alloc_block != NULL) {
         *p_alloc_list = new_alloc_block;
-        new_alloc_block->next = NULL;
+        set_next(new_alloc_block, NULL);
         return;
     }
-    new_alloc_block->next = *p_alloc_list;
+    set_next(new_alloc_block, *p_alloc_list);
     *p_alloc_list = new_alloc_block;
     return;
 }
@@ -197,10 +233,10 @@ void insert_free_block(pd **p_free_list, pd *new_free_block, int (*ascend_cmp)(p
     if (*p_free_list == NULL && new_free_block == NULL) return;
     if (*p_free_list == NULL && new_free_block != NULL) {
         *p_free_list = new_free_block;
-        new_free_block->next = NULL;
+        set_next(new_free_block, NULL);
         return;
     }
-    new_free_block->next = *p_free_list;
+    set_next(new_free_block, *p_free_list);
     *p_free_list = new_free_block;
     sort_pd_list_ascend(p_free_list, &new_free_block, ascend_cmp);
     return;
@@ -218,37 +254,37 @@ void sort_pd_list_ascend(pd **plist_head, pd **changed_item, int (*ascend_cmp)(p
     pd *item = *changed_item;
     pd *prev = *plist_head;
     if (prev == item) {
-        *plist_head = item->next;
+        *plist_head = get_next(item);
         prev = *plist_head;
     } else {
-        while (prev && prev->next != item) {
-            prev = prev->next;
+        while (prev && get_next(prev) != item) {
+            prev = get_next(prev);
         }
-        if (prev && prev->next == item) {
-            prev->next = item->next;
+        if (prev && get_next(prev) == item) {
+            set_next(prev, get_next(item));
         } else {
             return;
         }
     }
 
-    if ((*changed_item)->size == 0)
+    if (get_size(*changed_item) == 0)
         return;
     else {
         if (*plist_head == NULL || ascend_cmp(item, *plist_head) <= 0) {
-            item->next = *plist_head;
+            set_next(item, *plist_head);
             *plist_head = item;
         } else {
             pd *cur = *plist_head;
-            while (cur->next && ascend_cmp(cur, item) < 0) {
+            while (get_next(cur) && ascend_cmp(cur, item) < 0) {
                 prev = cur;
-                cur = cur->next;
+                cur = get_next(cur);
             }
-            if (cur->next == NULL && ascend_cmp(cur, item) < 0) {
-                cur->next = item;
-                item->next = NULL;
+            if (get_next(cur) == NULL && ascend_cmp(cur, item) < 0) {
+                set_next(cur, item);
+                set_next(item, NULL);
             } else {
-                prev->next = item;
-                item->next = cur;
+                set_next(prev, item);
+                set_next(item, cur);
             }
         }
     }
@@ -262,7 +298,7 @@ void sort_free_list_ascend(pd **plist_head, int (*ascend_cmp)(pd *, pd *)) {
     pd *sorted_list = NULL;
     pd *cur = *plist_head;
     while (cur) {
-        pd *next = cur->next;
+        pd *next = get_next(cur);
         insert_free_block(&sorted_list, cur, ascend_cmp);
         cur = next;
     }
@@ -284,15 +320,16 @@ void merge_free_blocks(pd **p_free_list, int (*ascend_cmp)(pd *, pd *)) {
     sort_free_list_ascend(p_free_list, PD_CMP_FUNC);
 
     pd *cur = *p_free_list;
-    while (cur && cur->next) {
-        pd *next = cur->next;
-        if (((uint64)cur + sizeof(pd) + cur->size == (uint64)next)
+    while (cur && get_next(cur)) {
+        pd *next = get_next(cur);
+        if (((uint64)cur + sizeof(pd) + get_size(cur) == (uint64)next)
             && (get_page_hash(cur) == get_page_hash(next))) { // 地址相邻且在同一页
             // 合并
-            cur->size = cur->size + sizeof(pd) + next->size;
-            cur->next = next->next;
+            set_size(cur, get_size(cur) + sizeof(pd) + get_size(next));
+            set_next(cur, get_next(next));
+
         } else {
-            cur = cur->next;
+            cur = get_next(cur);
         }
     }
     // 重新按照要求排序空闲链表
@@ -308,35 +345,35 @@ uint64 first_fit_alloc(uint64 size, pd **p_free_list, pd **p_alloc_list) {
     pd *prev = NULL;
 
     while (alloc_item) {
-        if (alloc_item->size == size) {
+        if (get_size(alloc_item) == size) {
             // 刚好合适
-            alloc_item->flag = 1;
-            alloc_item->size = 0;
+            set_flag(alloc_item, 1);
+            set_size(alloc_item, 0);
 
             // 从空闲链表中移除
             if (prev) {
-                prev->next = alloc_item->next;
+                set_next(prev, get_next(alloc_item));
             } else {
-                *p_free_list = alloc_item->next;
+                *p_free_list = get_next(alloc_item);
             }
 
             // 加入已分配链表
-            alloc_item->next = *p_alloc_list;
+            set_next(alloc_item, *p_alloc_list);
             *p_alloc_list = alloc_item;
             // 在分配块头部记录大小信息，便于释放时使用
-            alloc_item->size = size;
+            set_size(alloc_item, size);
 
             return (uint64)alloc_item;
-        } else if (alloc_item->size < size || alloc_item->size <= size + sizeof(pd)) {
+        } else if (get_size(alloc_item) < size + sizeof(pd)) {
             // 空闲块太小或者空闲块不适合拆分，继续找下一个
             prev = alloc_item;
-            alloc_item = alloc_item->next;
+            alloc_item = get_next(alloc_item);
         } else {
             // 找到合适的空闲块，进行分割
             // 从块的头部（起始位置）进行分配
 
-            uint64 total_free_size = alloc_item->size;
-            pd *next_free_node = alloc_item->next;
+            uint64 total_free_size = get_size(alloc_item);
+            pd *next_free_node = get_next(alloc_item);
 
             // 分配的块就是 alloc_item 本身
             pd *alloc_pd = alloc_item;
@@ -345,23 +382,23 @@ uint64 first_fit_alloc(uint64 size, pd **p_free_list, pd **p_alloc_list) {
             pd *new_free_item = (pd *)new_free_addr;
 
             // 设置新的空闲块
-            new_free_item->flag = 0;
-            new_free_item->size = total_free_size - size - sizeof(pd);
-            new_free_item->next = next_free_node;
+            set_flag(new_free_item, 0);
+            set_size(new_free_item, total_free_size - size - sizeof(pd));
+            set_next(new_free_item, next_free_node);
 
             // 更新空闲链表
             if (prev) {
-                prev->next = new_free_item;
+                set_next(prev, new_free_item);
             } else {
                 *p_free_list = new_free_item;
             }
 
             // 设置已分配块
-            alloc_pd->flag = 1;
-            alloc_pd->size = size;
+            set_flag(alloc_pd, 1);
+            set_size(alloc_pd, size);
 
             // 添加到已分配链表
-            alloc_pd->next = *p_alloc_list;
+            set_next(alloc_pd, *p_alloc_list);
             *p_alloc_list = alloc_pd;
 
             return (uint64)alloc_pd;
@@ -376,14 +413,14 @@ uint64 first_fit_free(uint64 addr, pd **p_free_list, pd **p_alloc_list) {
         panic("free error: no allocated block.\n");
     }
     pd *to_free = *p_alloc_list;
-    uint64 size = to_free->size;
+    uint64 size = get_size(to_free);
     if (addr == (uint64)to_free) {
-        to_free->flag = 0;
+        set_flag(to_free, 0);
         // 从已分配链表中移除
-        *p_alloc_list = to_free->next;
+        *p_alloc_list = get_next(to_free);
 
         // 单页内块：加入空闲链表
-        to_free->next = *p_free_list;
+        set_next(to_free, *p_free_list);
         *p_free_list = to_free;
         // 重新排序空闲链表
         sort_pd_list_ascend(p_free_list, &to_free, PD_CMP_FUNC);
@@ -392,18 +429,18 @@ uint64 first_fit_free(uint64 addr, pd **p_free_list, pd **p_alloc_list) {
         return size;
     }
     pd *prev = to_free;
-    to_free = to_free->next;
+    to_free = get_next(to_free);
     if (to_free) {
-        size = to_free->size;
+        size = get_size(to_free);
     }
     while (to_free) {
         if (addr == (uint64)to_free) {
-            to_free->flag = 0;
+            set_flag(to_free, 0);
             // 从已分配链表中移除
-            prev->next = to_free->next;
+            set_next(prev, get_next(to_free));
 
             // 单页内块：加入空闲链表
-            to_free->next = *p_free_list;
+            set_next(to_free, *p_free_list);
             *p_free_list = to_free;
             // 重新排序空闲链表
             sort_pd_list_ascend(p_free_list, &to_free, PD_CMP_FUNC);
@@ -412,9 +449,9 @@ uint64 first_fit_free(uint64 addr, pd **p_free_list, pd **p_alloc_list) {
             return size;
         } else {
             prev = to_free;
-            to_free = to_free->next;
+            to_free = get_next(to_free);
             if (to_free) {
-                size = to_free->size;
+                size = get_size(to_free);
             }
         }
     }
@@ -427,13 +464,13 @@ void remove_from_pd_list(pd **plist_head, pd *item) {
     }
     pd *prev = *plist_head;
     if (prev == item) {
-        *plist_head = item->next;
+        *plist_head = get_next(item);
         return;
     }
-    while (prev && prev->next != item) {
-        prev = prev->next;
+    while (prev && get_next(prev) != item) {
+        prev = get_next(prev);
     }
-    if (prev && prev->next == item) {
-        prev->next = item->next;
+    if (prev && get_next(prev) == item) {
+        set_next(prev, get_next(item));
     }
 }
