@@ -259,6 +259,9 @@ uint64 sys_user_allocate_mem(int n) {
                 highest_block = block;
             }
         }
+        if ((uint64)highest_block + get_size(highest_block) + sizeof(pd) < current->user_heap.heap_top) {
+            highest_block = NULL;
+        }
         uint64 start_va = 0;
         // 如果highest_block不为NULL，说明有空闲块，分配在其上方
         if (highest_block != NULL) {
