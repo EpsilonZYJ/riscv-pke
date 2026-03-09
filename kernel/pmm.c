@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spike_interface/spike_utils.h"
 #include "lock.h"
+#include "debug_config.h"
 
 static int page_ref_count[MAX_PAGES];
 
@@ -130,8 +131,11 @@ void pmm_init() {
     uint64 g_kernel_end = (uint64)&_end;
 
     uint64 pke_kernel_size = g_kernel_end - g_kernel_start;
+
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("PKE kernel start 0x%lx, PKE kernel end: 0x%lx, PKE kernel size: 0x%lx .\n",
            g_kernel_start, g_kernel_end, pke_kernel_size);
+#endif
 
     // free memory starts from the end of PKE kernel and must be page-aligined
     free_mem_start_addr = ROUNDUP(g_kernel_end, PGSIZE);
@@ -143,10 +147,13 @@ void pmm_init() {
         panic("Error when recomputing physical memory size (g_mem_size).\n");
 
     free_mem_end_addr = g_mem_size + DRAM_BASE;
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("free physical memory address: [0x%lx, 0x%lx] \n", free_mem_start_addr,
            free_mem_end_addr - 1);
 
     sprint("kernel memory manager is initializing ...\n");
+#endif
+
     // create the list of free pages
     create_freepage_list(free_mem_start_addr, free_mem_end_addr);
 }

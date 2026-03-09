@@ -7,9 +7,12 @@
 #include "vmm.h"
 #include "pmm.h"
 #include "string.h"
+#include "sync_utils.h"
+#include "debug_config.h"
 
 process *ready_queue_head[NCPU];
-// process *block_queue_head = NULL;
+
+static volatile int exit_counter = 0;
 
 //
 // insert a process, proc, into the END of ready queue.
@@ -17,7 +20,9 @@ process *ready_queue_head[NCPU];
 void insert_to_ready_queue(process *proc) {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("going to insert process %d to ready queue.\n", proc->pid);
+#endif
     release_proc_slot_reservation(proc->pid);
     // if the queue is empty in the beginning
     if (ready_queue_head[hartid] == NULL) {
@@ -133,15 +138,39 @@ void schedule() {
         for (int i = 0; i < NPROC; i++)
             if ((procs[i].status != FREE) && (procs[i].status != ZOMBIE)) {
                 should_shutdown = 0;
-                sprint("ready queue empty, but process %d is not in free/zombie state:%d\n",
-                       i, procs[i].status);
             }
 
         if (should_shutdown) {
-            sprint("no more ready processes, system shutdown now.\n");
-            shutdown(0);
+            if (hartid == 0) {
+                sync_barrier(&exit_counter, NCPU);
+                // in lab1, PKE considers only one app (one process).
+                // therefore, shutdown the system when the app calls exit()
+#ifdef SYSTEM_INFO_OUTPUT
+                sprint("no more ready processes, system shutdown now.\n");
+#endif
+                shutdown(0);
+            } else {
+                sync_barrier(&exit_counter, NCPU);
+            }
         } else {
-            panic("Not handled: we should let system wait for unfinished processes.\n");
+            if (hartid == 0) {
+                sync_barrier(&exit_counter, NCPU);
+                // in lab1, PKE considers only one app (one process).
+                // therefore, shutdown the system when the app calls exit()
+                should_shutdown = 1;
+                for (int i = 0; i < NPROC; i++)
+                    if ((procs[i].status != FREE) && (procs[i].status != ZOMBIE)) {
+                        should_shutdown = 0;
+                        sprint("process %d is still in state:%d\n", i, procs[i].status);
+                    }
+                if (!should_shutdown) {
+                    panic("Not handled: we should let system wait for unfinished processes.\n");
+                }
+                sprint("no more ready processes, system shutdown now.\n");
+                shutdown(0);
+            } else {
+                sync_barrier(&exit_counter, NCPU);
+            }
         }
     }
 
@@ -150,7 +179,9 @@ void schedule() {
     ready_queue_head[hartid] = ready_queue_head[hartid]->queue_next;
 
     current[hartid]->status = RUNNING;
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("hartid = %d: going to schedule process %d to run.\n", hartid, current[hartid]->pid);
+#endif
     switch_to(current[hartid]);
 }
 

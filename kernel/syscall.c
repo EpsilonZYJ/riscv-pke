@@ -24,8 +24,6 @@
 
 #include <stdlib.h>
 
-static volatile int exit_counter = 0;
-
 //
 // implement the SYS_user_print syscall
 //
@@ -44,9 +42,9 @@ ssize_t sys_user_print(const char *buf, size_t n) {
 // implement the SYS_user_exit syscall
 //
 ssize_t sys_user_exit(uint64 code) {
-    sprint("User exit with code:%d.\n", code);
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
+    sprint("hartid = %d: User exit with code:%d.\n", hartid, code);
     // reclaim the current process, and reschedule. added @lab3_1
     process *tmp = wake_from_block_queue(&block_queue_head[hartid], current[hartid]);
     free_process(current[hartid]);
@@ -90,35 +88,13 @@ ssize_t sys_user_exit(uint64 code) {
 
     if (tmp == NULL) {
         schedule();
-        // TODO: fix exit waiting process
-        if (hartid == 0) {
-            sprint("hartid = %d: User exit with code:%d.\n", hartid, code);
-            sync_barrier(&exit_counter, NCPU);
-            sprint("hartid = %d: shutdown with code:%d.\n", hartid, code);
-            // in lab1, PKE considers only one app (one process).
-            // therefore, shutdown the system when the app calls exit()
-            shutdown(code);
-        } else {
-            sprint("hartid = %d: User exit with code:%d.\n", hartid, code);
-            sync_barrier(&exit_counter, NCPU);
-        }
         return 0;
     }
     current[hartid] = tmp;
     current[hartid]->status = READY;
     insert_to_ready_queue(current[hartid]);
     schedule();
-    if (hartid == 0) {
-        sprint("hartid = %d: User exit with code:%d.\n", hartid, code);
-        sync_barrier(&exit_counter, NCPU);
-        sprint("hartid = %d: shutdown with code:%d.\n", hartid, code);
-        // in lab1, PKE considers only one app (one process).
-        // therefore, shutdown the system when the app calls exit()
-        shutdown(code);
-    } else {
-        sprint("hartid = %d: User exit with code:%d.\n", hartid, code);
-        sync_barrier(&exit_counter, NCPU);
-    }
+
     return 0;
 }
 

@@ -76,7 +76,9 @@ process *load_user_program() {
 
     proc = alloc_process();
 
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("User application is loading.\n");
+#endif
 
     arg_buf arg_bug_msg;
 
@@ -98,7 +100,9 @@ process *load_user_program() {
 int s_start(void) {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("hartid = %d: Enter supervisor mode...\n", hartid);
+#endif
     // in the beginning, we use Bare mode (direct) memory mapping as in lab1.
     // but now, we are going to switch to the paging mode @lab2_1.
     // note, the code still works in Bare mode when calling pmm_init() and kern_vm_init().
@@ -139,7 +143,9 @@ int s_start(void) {
     sprint("hartid = %d: kernel page table is on \n", hartid);
 #endif
 
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("hartid = %d: Switch to user mode...\n", hartid);
+#endif
     // the application code (elf) is first loaded into memory, and then put into execution
     // added @lab3_1
     insert_to_ready_queue(load_user_program());

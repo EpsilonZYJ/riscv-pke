@@ -13,8 +13,10 @@
 // #define MULTICORE_MEM_DEBUG
 // #define INIT_DEBUG
 
-#define FILE_SYSTEM_OUTPUT
-#define PROCESS_SYSTEM_OUTPUT
-#define INIT_OUTPUT
+// #define FILE_SYSTEM_OUTPUT
+// #define PROCESS_SYSTEM_OUTPUT
+// #define INIT_OUTPUT
+
+#define SYSTEM_INFO_OUTPUT
 
 #endif // RISCV_PKE_DEBUG_H

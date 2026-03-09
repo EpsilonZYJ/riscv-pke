@@ -388,7 +388,9 @@ elf_status load_debug_line_section(elf_ctx *ctx, elf_sect_header sect_header) {
 //
 void load_bincode_from_host_elf(process *p, char *filename) {
     uint64 hartid = read_tp();
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("hartid = %d: Application: %s\n", hartid, filename);
+#endif
 
     // elf loading. elf_ctx is defined in kernel/elf.h, used to track the loading process.
     elf_ctx elfloader;
@@ -438,7 +440,9 @@ void load_bincode_from_host_elf(process *p, char *filename) {
     // close the vfs file
     vfs_close(info.f);
 
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("hartid = %d: Application program entry point (virtual address): 0x%lx\n", hartid, p->trapframe->epc);
+#endif
 }
 
 ssize_t do_exec(char *command, char *para) {

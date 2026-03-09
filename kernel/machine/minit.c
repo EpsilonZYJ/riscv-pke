@@ -7,6 +7,7 @@
 #include "kernel/config.h"
 #include "spike_interface/spike_utils.h"
 #include "kernel/sync_utils.h"
+#include "kernel/debug_config.h"
 
 //
 // global variables are placed in the .data section.
@@ -98,7 +99,9 @@ void m_start(uintptr_t hartid, uintptr_t dtb) {
     write_tp(hartid);
     if (hartid == 0) {
         spike_file_init();
+#ifdef SYSTEM_INFO_OUTPUT
         sprint("In m_start, hartid:%d\n", hartid);
+#endif
 
         // init HTIF (Host-Target InterFace) and memory by using the Device Table Blob (DTB)
         // init_dtb() is defined above.
@@ -107,7 +110,9 @@ void m_start(uintptr_t hartid, uintptr_t dtb) {
 
     sync_barrier(&m_counter, NCPU);
     if (hartid != 0) {
+#ifdef SYSTEM_INFO_OUTPUT
         sprint("In m_start, hartid:%d\n", hartid);
+#endif
     }
 
     // save the address of trap frame for interrupt in M mode to "mscratch". added @lab1_2

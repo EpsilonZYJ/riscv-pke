@@ -138,7 +138,9 @@ void kern_vm_init(void) {
     kern_vm_map(t_page_dir, KERN_BASE, DRAM_BASE, (uint64)_etext - KERN_BASE,
                 prot_to_type(PROT_READ | PROT_EXEC, 0));
 
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("KERN_BASE 0x%lx\n", lookup_pa(t_page_dir, KERN_BASE));
+#endif
 
     // also (direct) map remaining address space, to make them accessable from kernel.
     // this is important when kernel needs to access the memory content of user's app
@@ -146,7 +148,9 @@ void kern_vm_init(void) {
     kern_vm_map(t_page_dir, (uint64)_etext, (uint64)_etext, PHYS_TOP - (uint64)_etext,
                 prot_to_type(PROT_READ | PROT_WRITE, 0));
 
+#ifdef SYSTEM_INFO_OUTPUT
     sprint("physical address of _etext is: 0x%lx\n", lookup_pa(t_page_dir, (uint64)_etext));
+#endif
 
     g_kernel_pagetable = t_page_dir;
 }
