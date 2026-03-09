@@ -8,5 +8,7 @@
 // #define SYS_USER_PRINT_BACKTRACE_DEBUG
 // #define ELF_LOAD_SYMBOL_TABLE_DEBUG
 // #define MEM_DEBUG
+// #define ELF_C_DEBUG
+// #define MTRAP_C_DEBUG
 
 #endif // RISCV_PKE_DEBUG_H

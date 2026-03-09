@@ -23,6 +23,8 @@
 
 #define MEM_ALLOC_STRATEGY first_fit // 可修改为 best_fit, next_fit 等
 
+#define MAX_DEBUG_LINE_SIZE 0x10000 // 64KB
+
 // 动态生成函数名宏
 #define ALLOC_FUNC EXPAND_CONCAT(MEM_ALLOC_STRATEGY, _alloc)
 #define FREE_FUNC EXPAND_CONCAT(MEM_ALLOC_STRATEGY, _free)

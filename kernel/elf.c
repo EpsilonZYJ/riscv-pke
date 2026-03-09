@@ -14,10 +14,8 @@
 #include "vfs.h"
 #include "spike_interface/spike_utils.h"
 #include "util/functions.h"
-
-// #define ELF_C_DEBUG
-
-#define MAX_DEBUG_LINE_SIZE 0x10000 // 64KB
+#include "config.h"
+#include "debug_config.h"
 
 // 64KB, aligned
 static uint64 debug_line_buf[MAX_DEBUG_LINE_SIZE / sizeof(uint64)];

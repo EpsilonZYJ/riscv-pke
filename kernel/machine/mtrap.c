@@ -2,8 +2,7 @@
 #include "kernel/process.h"
 #include "spike_interface/spike_utils.h"
 #include "util/string.h"
-
-// #define MTRAP_C_DEBUG
+#include "kernel/debug_config.h"
 
 void print_source_code_line(const char *path, int target_line) {
 #ifdef MTRAP_C_DEBUG
