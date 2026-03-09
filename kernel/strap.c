@@ -53,7 +53,10 @@ void handle_mtimer_trap() {
 // stval: the virtual address that causes pagefault when being accessed.
 //
 void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
-    sprint("handle_page_fault: %lx\n", stval);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+
+    sprint("hartid = %d: handle_page_fault: %lx\n", hartid, stval);
     switch (mcause) {
     case CAUSE_STORE_PAGE_FAULT:
         // (lab2_3): implement the operations that solve the page fault to
@@ -61,7 +64,7 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
         // hint: first allocate a new physical page, and then, maps the new page to the
         // virtual address that causes the page fault.
         {
-            pte_t *pte = page_walk(current->pagetable, stval, 0);
+            pte_t *pte = page_walk(current[hartid]->pagetable, stval, 0);
             if (pte && (*pte & PTE_V) && (*pte & PTE_COW)) {
                 uint64 old_pa = PTE2PA(*pte);
                 uint64 new_page = old_pa;
@@ -79,9 +82,9 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
                 break;
             }
         }
-        if (stval >= current->trapframe->regs.sp - PGSIZE) {
+        if (stval >= current[hartid]->trapframe->regs.sp - PGSIZE) {
             uint64 new_page = (uint64)alloc_page();
-            user_vm_map((pagetable_t)current->pagetable, ROUNDDOWN(stval, PGSIZE), PGSIZE,
+            user_vm_map((pagetable_t)current[hartid]->pagetable, ROUNDDOWN(stval, PGSIZE), PGSIZE,
                         new_page, prot_to_type(PROT_WRITE | PROT_READ, 1));
         } else {
             panic("this address is not available!");
@@ -101,13 +104,15 @@ void rrsched() {
     // hint: increase the tick_count member of current process by one, if it is bigger than
     // TIME_SLICE_LEN (means it has consumed its time slice), change its status into READY,
     // place it in the rear of ready queue, and finally schedule next process to run.
-    if (current->tick_count + 1 >= TIME_SLICE_LEN) {
-        current->tick_count = 0;
-        current->status = READY;
-        insert_to_ready_queue(current);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    if (current[hartid]->tick_count + 1 >= TIME_SLICE_LEN) {
+        current[hartid]->tick_count = 0;
+        current[hartid]->status = READY;
+        insert_to_ready_queue(current[hartid]);
         schedule();
     } else {
-        current->tick_count++;
+        current[hartid]->tick_count++;
     }
 }
 
@@ -121,9 +126,12 @@ void smode_trap_handler(void) {
     if ((read_csr(sstatus) & SSTATUS_SPP) != 0)
         panic("usertrap: not from user mode");
 
-    assert(current);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+
+    assert(current[hartid]);
     // save user process counter.
-    current->trapframe->epc = read_csr(sepc);
+    current[hartid]->trapframe->epc = read_csr(sepc);
 
     // if the cause of trap is syscall from user application.
     // read_csr() and CAUSE_USER_ECALL are macros defined in kernel/riscv.h
@@ -132,7 +140,7 @@ void smode_trap_handler(void) {
     // use switch-case instead of if-else, as there are many cases since lab2_3.
     switch (cause) {
     case CAUSE_USER_ECALL:
-        handle_syscall(current->trapframe);
+        handle_syscall(current[hartid]->trapframe);
         break;
     case CAUSE_MTIMER_S_TRAP:
         handle_mtimer_trap();
@@ -153,5 +161,5 @@ void smode_trap_handler(void) {
     }
 
     // continue (come back to) the execution of current process.
-    switch_to(current);
+    switch_to(current[hartid]);
 }

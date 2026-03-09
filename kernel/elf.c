@@ -18,7 +18,7 @@
 #include "debug_config.h"
 
 // 64KB, aligned
-static uint64 debug_line_buf[MAX_DEBUG_LINE_SIZE / sizeof(uint64)];
+static uint64 debug_line_buf[NCPU][MAX_DEBUG_LINE_SIZE / sizeof(uint64)];
 
 typedef struct elf_info_t {
     struct file *f;
@@ -311,6 +311,7 @@ elf_status elf_load(elf_ctx *ctx) {
  * @return 加载状态
  */
 elf_status load_debug_line_section_header(elf_ctx *ctx, char **pdebug_line, uint64 *plength, elf_sect_header *psect_header) {
+    uint64 hartid = read_tp();
     psect_header->size = 0;
 
     // 1. Get String Table Section Header
@@ -320,11 +321,11 @@ elf_status load_debug_line_section_header(elf_ctx *ctx, char **pdebug_line, uint
         return EL_EIO;
 
     // 2. Load String Table
-    if (shstr_header.size > sizeof(debug_line_buf)) return EL_ENOMEM;
-    if (elf_fpread(ctx, (void *)debug_line_buf, shstr_header.size, shstr_header.offset) != shstr_header.size)
+    if (shstr_header.size > sizeof(debug_line_buf[hartid])) return EL_ENOMEM;
+    if (elf_fpread(ctx, (void *)debug_line_buf[hartid], shstr_header.size, shstr_header.offset) != shstr_header.size)
         return EL_EIO;
 
-    char *shstrtab = (char *)debug_line_buf;
+    char *shstrtab = (char *)debug_line_buf[hartid];
 
     // 3. Iterate sections to find .debug_line
     int i, off;
@@ -345,13 +346,13 @@ elf_status load_debug_line_section_header(elf_ctx *ctx, char **pdebug_line, uint
     if (!found) return EL_ERR; // Not found
 
     // 4. Load .debug_line content (overwriting shstrtab)
-    if (psect_header->size > sizeof(debug_line_buf)) return EL_ENOMEM;
-    if (elf_fpread(ctx, (void *)debug_line_buf, psect_header->size, psect_header->offset) != psect_header->size) {
+    if (psect_header->size > sizeof(debug_line_buf[hartid])) return EL_ENOMEM;
+    if (elf_fpread(ctx, (void *)debug_line_buf[hartid], psect_header->size, psect_header->offset) != psect_header->size) {
         return EL_EIO;
     }
 
     // 读取.debug_line节内容
-    *pdebug_line = (char *)debug_line_buf;
+    *pdebug_line = (char *)debug_line_buf[hartid];
     *plength = psect_header->size;
     return EL_OK;
 }
@@ -363,14 +364,16 @@ elf_status load_debug_line_section_header(elf_ctx *ctx, char **pdebug_line, uint
 //  * @return 加载状态
 //  */
 elf_status load_debug_line_section(elf_ctx *ctx, elf_sect_header sect_header) {
-    if (sect_header.size > sizeof(debug_line_buf)) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU && hartid >= 0);
+    if (sect_header.size > sizeof(debug_line_buf[hartid])) {
 #ifdef ELF_C_DEBUG
         sprint("[DEBUG]load_debug_line_section: Debug line section too large: %d bytes\n", sect_header.size);
 #endif
 
         return EL_ENOMEM;
     }
-    if (elf_fpread(ctx, (void *)debug_line_buf, sect_header.size, sect_header.offset) != sect_header.size) {
+    if (elf_fpread(ctx, (void *)debug_line_buf[hartid], sect_header.size, sect_header.offset) != sect_header.size) {
         return EL_EIO;
     }
     return EL_OK;
@@ -380,7 +383,8 @@ elf_status load_debug_line_section(elf_ctx *ctx, elf_sect_header sect_header) {
 // load the elf of user application, by using the spike file interface.
 //
 void load_bincode_from_host_elf(process *p, char *filename) {
-    sprint("Application: %s\n", filename);
+    uint64 hartid = read_tp();
+    sprint("hartid = %d: Application: %s\n", hartid, filename);
 
     // elf loading. elf_ctx is defined in kernel/elf.h, used to track the loading process.
     elf_ctx elfloader;
@@ -430,10 +434,11 @@ void load_bincode_from_host_elf(process *p, char *filename) {
     // close the vfs file
     vfs_close(info.f);
 
-    sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
+    sprint("hartid = %d: Application program entry point (virtual address): 0x%lx\n", hartid, p->trapframe->epc);
 }
 
 ssize_t do_exec(char *command, char *para) {
+    uint64 hartid = read_tp();
     char k_command[MAX_PATH_LEN];
     char k_para[MAX_PATH_LEN];
 
@@ -448,45 +453,45 @@ ssize_t do_exec(char *command, char *para) {
         k_para[0] = '\0';
 
     // 释放当前进程的用户空间映射，重新加载新的应用程序
-    for (int i = 0; i < current->total_mapped_region; i++) {
-        int type = current->mapped_info[i].seg_type;
+    for (int i = 0; i < current[hartid]->total_mapped_region; i++) {
+        int type = current[hartid]->mapped_info[i].seg_type;
         if (type == CODE_SEGMENT || type == DATA_SEGMENT || type == STACK_SEGMENT || type == HEAP_SEGMENT) {
-            if (current->mapped_info[i].npages > 0) {
-                const uint64 va = ROUNDDOWN(current->mapped_info[i].va, PGSIZE);
-                const uint64 size = current->mapped_info[i].npages * PGSIZE;
+            if (current[hartid]->mapped_info[i].npages > 0) {
+                const uint64 va = ROUNDDOWN(current[hartid]->mapped_info[i].va, PGSIZE);
+                const uint64 size = current[hartid]->mapped_info[i].npages * PGSIZE;
                 int free_flag = 1;
                 if (type == CODE_SEGMENT) free_flag = 0;
-                user_vm_unmap(current->pagetable, va, size, free_flag);
-                current->mapped_info[i].npages = 0;
-                current->mapped_info[i].va = 0;
-                current->mapped_info[i].seg_type = 0;
+                user_vm_unmap(current[hartid]->pagetable, va, size, free_flag);
+                current[hartid]->mapped_info[i].npages = 0;
+                current[hartid]->mapped_info[i].va = 0;
+                current[hartid]->mapped_info[i].seg_type = 0;
             }
         }
     }
     flush_tlb();
 
-    current->user_heap.mem_rib.alloc_list = NULL;
-    current->user_heap.mem_rib.free_list = NULL;
-    current->user_heap.mem_rib.alloc = ALLOC_FUNC;
-    current->user_heap.mem_rib.free = FREE_FUNC;
-    current->user_heap.heap_top = USER_FREE_ADDRESS_START;
-    current->user_heap.heap_bottom = USER_FREE_ADDRESS_START;
+    current[hartid]->user_heap.mem_rib.alloc_list = NULL;
+    current[hartid]->user_heap.mem_rib.free_list = NULL;
+    current[hartid]->user_heap.mem_rib.alloc = ALLOC_FUNC;
+    current[hartid]->user_heap.mem_rib.free = FREE_FUNC;
+    current[hartid]->user_heap.heap_top = USER_FREE_ADDRESS_START;
+    current[hartid]->user_heap.heap_bottom = USER_FREE_ADDRESS_START;
 
     void *new_stack_page = alloc_page();
-    user_vm_map(current->pagetable, USER_STACK_TOP - PGSIZE, PGSIZE, (uint64)new_stack_page, prot_to_type(PROT_READ | PROT_WRITE, 1));
-    current->mapped_info[STACK_SEGMENT].va = USER_STACK_TOP - PGSIZE;
-    current->mapped_info[STACK_SEGMENT].npages = 1;
-    current->mapped_info[STACK_SEGMENT].seg_type = STACK_SEGMENT;
+    user_vm_map(current[hartid]->pagetable, USER_STACK_TOP - PGSIZE, PGSIZE, (uint64)new_stack_page, prot_to_type(PROT_READ | PROT_WRITE, 1));
+    current[hartid]->mapped_info[STACK_SEGMENT].va = USER_STACK_TOP - PGSIZE;
+    current[hartid]->mapped_info[STACK_SEGMENT].npages = 1;
+    current[hartid]->mapped_info[STACK_SEGMENT].seg_type = STACK_SEGMENT;
 
     // Reinitialize HEAP_SEGMENT after cleanup
-    current->mapped_info[HEAP_SEGMENT].va = USER_FREE_ADDRESS_START;
-    current->mapped_info[HEAP_SEGMENT].npages = 0;
-    current->mapped_info[HEAP_SEGMENT].seg_type = HEAP_SEGMENT;
+    current[hartid]->mapped_info[HEAP_SEGMENT].va = USER_FREE_ADDRESS_START;
+    current[hartid]->mapped_info[HEAP_SEGMENT].npages = 0;
+    current[hartid]->mapped_info[HEAP_SEGMENT].seg_type = HEAP_SEGMENT;
 
     // Reset total_mapped_region to 4 (STACK, CONTEXT, SYSTEM, HEAP are the base segments)
-    current->total_mapped_region = 4;
+    current[hartid]->total_mapped_region = 4;
 
-    load_bincode_from_host_elf(current, k_command);
+    load_bincode_from_host_elf(current[hartid], k_command);
 
     if (strlen(k_para) > 0) {
         uint64 sp = USER_STACK_TOP;
@@ -496,30 +501,30 @@ ssize_t do_exec(char *command, char *para) {
         uint64 argv_array_addr = (arg_string_addr - 16) & ~0xF;
 
         if (arg_string_addr > USER_STACK_TOP - PGSIZE && arg_string_addr < USER_STACK_TOP && argv_array_addr > USER_STACK_TOP - PGSIZE && argv_array_addr < USER_STACK_TOP) {
-            char *arg_str_pa = (char *)user_va_to_pa((pagetable_t)current->pagetable, (void *)arg_string_addr);
-            uint64 *argv_pa = (uint64 *)user_va_to_pa((pagetable_t)current->pagetable, (void *)argv_array_addr);
+            char *arg_str_pa = (char *)user_va_to_pa((pagetable_t)current[hartid]->pagetable, (void *)arg_string_addr);
+            uint64 *argv_pa = (uint64 *)user_va_to_pa((pagetable_t)current[hartid]->pagetable, (void *)argv_array_addr);
             if (arg_str_pa != NULL && argv_pa != NULL) {
                 strcpy(arg_str_pa, k_para);
 
                 argv_pa[0] = arg_string_addr;
                 argv_pa[1] = 0;
 
-                current->trapframe->regs.sp = argv_array_addr;
-                current->trapframe->regs.a0 = 1;
-                current->trapframe->regs.a1 = argv_array_addr;
+                current[hartid]->trapframe->regs.sp = argv_array_addr;
+                current[hartid]->trapframe->regs.a0 = 1;
+                current[hartid]->trapframe->regs.a1 = argv_array_addr;
             }
         }
     } else {
-        current->trapframe->regs.sp = USER_STACK_TOP;
-        current->trapframe->regs.a0 = 0;
-        current->trapframe->regs.a1 = 0;
+        current[hartid]->trapframe->regs.sp = USER_STACK_TOP;
+        current[hartid]->trapframe->regs.a0 = 0;
+        current[hartid]->trapframe->regs.a1 = 0;
     }
     flush_tlb();
 
     return 0;
 }
 
-static symbol_table g_symtab;
+static symbol_table g_symtab[NCPU];
 
 /**
  * @brief 从ELF文件中加载符号表到静态内存g_symtab中
@@ -532,6 +537,8 @@ static symbol_table g_symtab;
  * @copyright Copyright (c) 2025
  */
 elf_status elf_load_symbol_table(elf_ctx *ctx) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
     elf_sec_header sh_symtab;
     int i, off;
     int found = 0;
@@ -560,9 +567,9 @@ elf_status elf_load_symbol_table(elf_ctx *ctx) {
         sprint("Symbol table too large: %u symbols.\n", num_symbols);
         return EL_ERR;
     }
-    if (elf_fpread(ctx, (void *)g_symtab.symbols, symtab_size, symtab_addr) != symtab_size)
+    if (elf_fpread(ctx, (void *)g_symtab[hartid].symbols, symtab_size, symtab_addr) != symtab_size)
         return EL_EIO;
-    g_symtab.symbol_count = num_symbols;
+    g_symtab[hartid].symbol_count = num_symbols;
 
     // 读取字符串表节头
     uint64 sh_strtab_addr = ctx->ehdr.shoff + (sh_symtab.sh_link * ctx->ehdr.shentsize);
@@ -579,13 +586,13 @@ elf_status elf_load_symbol_table(elf_ctx *ctx) {
     }
 
     // 读取字符串表内容
-    if (elf_fpread(ctx, (void *)g_symtab.str_table, sh_strtab.sh_size, sh_strtab.sh_offset) != sh_strtab.sh_size)
+    if (elf_fpread(ctx, (void *)g_symtab[hartid].str_table, sh_strtab.sh_size, sh_strtab.sh_offset) != sh_strtab.sh_size)
         return EL_EIO;
-    g_symtab.str_table_size = sh_strtab.sh_size;
+    g_symtab[hartid].str_table_size = sh_strtab.sh_size;
 
 #ifdef ELF_LOAD_SYMBOL_TABLE_DEBUG
-    for (int i = 0; i < g_symtab.symbol_count; i++) {
-        sprint("Loaded symbol: %s \t at 0x%lx, max addr 0x%lx\n", &g_symtab.str_table[g_symtab.symbols[i].st_name], g_symtab.symbols[i].st_value, g_symtab.symbols[i].st_value + g_symtab.symbols[i].st_size);
+    for (int i = 0; i < g_symtab[hartid].symbol_count; i++) {
+        sprint("Loaded symbol: %s \t at 0x%lx, max addr 0x%lx\n", &g_symtab[hartid].str_table[g_symtab[hartid].symbols[i].st_name], g_symtab[hartid].symbols[i].st_value, g_symtab[hartid].symbols[i].st_value + g_symtab[hartid].symbols[i].st_size);
     }
 #endif
 
@@ -603,12 +610,13 @@ elf_status elf_load_symbol_table(elf_ctx *ctx) {
  * @copyright Copyright (c) 2025
  */
 const char *elf_find_symbol_by_addr(uint64 addr) {
-    for (int i = 0; i < g_symtab.symbol_count; i++) {
-        elf_symbol_rec *sym = &g_symtab.symbols[i];
+    uint64 hartid = read_tp();
+    for (int i = 0; i < g_symtab[hartid].symbol_count; i++) {
+        elf_symbol_rec *sym = &g_symtab[hartid].symbols[i];
         // 如果不是函数类型符号，跳过
         if (ELF_ST_TYPE(sym->st_info) != STT_FUNC) continue;
 
-        if (sym->st_name > g_symtab.str_table_size) {
+        if (sym->st_name > g_symtab[hartid].str_table_size) {
             sprint("Invalid symbol name offset: %u\n", sym->st_name);
             sprint("ELF inconsistency detected!\n");
             return NULL;
@@ -618,7 +626,7 @@ const char *elf_find_symbol_by_addr(uint64 addr) {
         // 因此这里不能直接查找是否是某个函数的入口地址
         // 正确方式是查找返回地址是否在函数范围内（函数体内的某个地址）
         if (addr >= sym->st_value && addr < sym->st_value + sym->st_size) {
-            return &g_symtab.str_table[sym->st_name];
+            return &g_symtab[hartid].str_table[sym->st_name];
         }
     }
     return NULL;

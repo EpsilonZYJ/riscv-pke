@@ -130,9 +130,9 @@ process *alloc_process();
 int free_process(process *proc);
 
 // current running process
-extern process *current;
+extern process *current[NCPU];
 
-extern process *block_queue_head;
+extern process *block_queue_head[NCPU];
 
 int pd_first_fit_cmp(pd *a, pd *b);
 void sort_pd_list_ascend(pd **plist_head, pd **changed_item, int (*ascend_cmp)(pd *, pd *));

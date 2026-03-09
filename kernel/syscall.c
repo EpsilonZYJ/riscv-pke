@@ -16,13 +16,15 @@
 #include "proc_file.h"
 
 #include "spike_interface/spike_utils.h"
-#include "kernel/semaphore.h"
 #include "semaphore.h"
 #include "debug_config.h"
+#include "kernel/sync_utils.h"
 
 #include "elf.h"
 
 #include <stdlib.h>
+
+static volatile int exit_counter = 0;
 
 //
 // implement the SYS_user_print syscall
@@ -30,9 +32,11 @@
 ssize_t sys_user_print(const char *buf, size_t n) {
     // buf is now an address in user space of the given app's user stack,
     // so we have to transfer it into phisical address (kernel is running in direct mapping).
-    assert(current);
-    char *pa = (char *)user_va_to_pa((pagetable_t)(current->pagetable), (void *)buf);
-    sprint(pa);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)buf);
+    sprint("hartid = %d: %s", hartid, pa);
     return 0;
 }
 
@@ -41,23 +45,25 @@ ssize_t sys_user_print(const char *buf, size_t n) {
 //
 ssize_t sys_user_exit(uint64 code) {
     sprint("User exit with code:%d.\n", code);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
     // reclaim the current process, and reschedule. added @lab3_1
-    process *tmp = wake_from_block_queue(&block_queue_head, current);
-    free_process(current);
+    process *tmp = wake_from_block_queue(&block_queue_head[hartid], current[hartid]);
+    free_process(current[hartid]);
 
     // 先处理未被free的内存块
-    if (current->user_heap.mem_rib.alloc_list != NULL) {
-        pd *alloc_item = current->user_heap.mem_rib.alloc_list;
+    if (current[hartid]->user_heap.mem_rib.alloc_list != NULL) {
+        pd *alloc_item = current[hartid]->user_heap.mem_rib.alloc_list;
         while (alloc_item) {
             uint64 alloc_addr = (uint64)(alloc_item);
-            current->user_heap.mem_rib.free(alloc_addr, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
-            alloc_item = current->user_heap.mem_rib.alloc_list;
+            current[hartid]->user_heap.mem_rib.free(alloc_addr, &current[hartid]->user_heap.mem_rib.free_list, &current[hartid]->user_heap.mem_rib.alloc_list);
+            alloc_item = current[hartid]->user_heap.mem_rib.alloc_list;
         }
     }
-    sort_free_list_ascend(&current->user_heap.mem_rib.free_list, PD_CMP_FUNC);
-    merge_free_blocks(&current->user_heap.mem_rib.free_list, PD_CMP_FUNC);
+    sort_free_list_ascend(&current[hartid]->user_heap.mem_rib.free_list, PD_CMP_FUNC);
+    merge_free_blocks(&current[hartid]->user_heap.mem_rib.free_list, PD_CMP_FUNC);
 
-    pd *free_item = current->user_heap.mem_rib.free_list;
+    pd *free_item = current[hartid]->user_heap.mem_rib.free_list;
     if (free_item != NULL) {
         while (free_item) {
             pd *next_item = get_next(free_item);
@@ -65,31 +71,54 @@ ssize_t sys_user_exit(uint64 code) {
             free_item = get_next(free_item);
             if (get_size(to_free) + sizeof(pd) <= PGSIZE) {
                 // 取消映射并释放物理页
-                user_vm_unmap((pagetable_t)current->pagetable, (uint64)to_free, PGSIZE, 1);
+                user_vm_unmap((pagetable_t)current[hartid]->pagetable, (uint64)to_free, PGSIZE, 1);
             }
-            current->user_heap.mem_rib.free_list = free_item;
+            current[hartid]->user_heap.mem_rib.free_list = free_item;
         }
     }
 
     // FIXME: 可以使用heap_top和heap_bottom来优化释放过程，直接释放整个堆空间，而不需要逐块释放。
-    for (uint64 heap_va = current->user_heap.heap_bottom; heap_va < current->user_heap.heap_top; heap_va += PGSIZE) {
-        pte_t *pte = page_walk((pagetable_t)current->pagetable, heap_va, 0);
+    for (uint64 heap_va = current[hartid]->user_heap.heap_bottom; heap_va < current[hartid]->user_heap.heap_top; heap_va += PGSIZE) {
+        pte_t *pte = page_walk((pagetable_t)current[hartid]->pagetable, heap_va, 0);
         if (pte && (*pte & PTE_V)) {
             // 页面已映射，需要释放
             uint64 pa = PTE2PA(*pte);
             // 取消映射并释放物理页
-            user_vm_unmap((pagetable_t)current->pagetable, heap_va, PGSIZE, 1);
+            user_vm_unmap((pagetable_t)current[hartid]->pagetable, heap_va, PGSIZE, 1);
         }
     }
 
     if (tmp == NULL) {
         schedule();
+        // TODO: fix exit waiting process
+        if (hartid == 0) {
+            sprint("hartid = %d: User exit with code:%d.\n", hartid, code);
+            sync_barrier(&exit_counter, NCPU);
+            sprint("hartid = %d: shutdown with code:%d.\n", hartid, code);
+            // in lab1, PKE considers only one app (one process).
+            // therefore, shutdown the system when the app calls exit()
+            shutdown(code);
+        } else {
+            sprint("hartid = %d: User exit with code:%d.\n", hartid, code);
+            sync_barrier(&exit_counter, NCPU);
+        }
         return 0;
     }
-    current = tmp;
-    current->status = READY;
-    insert_to_ready_queue(current);
+    current[hartid] = tmp;
+    current[hartid]->status = READY;
+    insert_to_ready_queue(current[hartid]);
     schedule();
+    if (hartid == 0) {
+        sprint("hartid = %d: User exit with code:%d.\n", hartid, code);
+        sync_barrier(&exit_counter, NCPU);
+        sprint("hartid = %d: shutdown with code:%d.\n", hartid, code);
+        // in lab1, PKE considers only one app (one process).
+        // therefore, shutdown the system when the app calls exit()
+        shutdown(code);
+    } else {
+        sprint("hartid = %d: User exit with code:%d.\n", hartid, code);
+        sync_barrier(&exit_counter, NCPU);
+    }
     return 0;
 }
 
@@ -97,6 +126,9 @@ ssize_t sys_user_exit(uint64 code) {
 // implementation of malloc in the world ... added @lab2_2
 //
 uint64 sys_user_allocate_mem(int n) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
     if (n <= 0) {
         return (uint64)NULL;
     }
@@ -107,7 +139,7 @@ uint64 sys_user_allocate_mem(int n) {
 
     if (n + sizeof(pd) <= PGSIZE) {
         // 单页内分配
-        uint64 alloc_va = current->user_heap.mem_rib.alloc(n, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
+        uint64 alloc_va = current[hartid]->user_heap.mem_rib.alloc(n, &current[hartid]->user_heap.mem_rib.free_list, &current[hartid]->user_heap.mem_rib.alloc_list);
         if (alloc_va != (uint64)NULL) {
             return alloc_va + sizeof(pd);
         } else {
@@ -115,21 +147,21 @@ uint64 sys_user_allocate_mem(int n) {
             if (pa == NULL) {
                 return (uint64)NULL;
             }
-            current->mapped_info[HEAP_SEGMENT].npages++;
-            uint64 alloc_va = current->user_heap.heap_top;
-            user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
+            current[hartid]->mapped_info[HEAP_SEGMENT].npages++;
+            uint64 alloc_va = current[hartid]->user_heap.heap_top;
+            user_vm_map((pagetable_t)current[hartid]->pagetable, alloc_va, PGSIZE, (uint64)pa,
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
-            current->user_heap.heap_top += PGSIZE;
+            current[hartid]->user_heap.heap_top += PGSIZE;
             // pd *new_free_block = (pd *)user_va_to_pa(current->pagetable, (void *)alloc_va);
             pd *new_free_block = (void *)alloc_va;
 #ifdef MEM_DEBUG
-            sprint("new free block at va: %lx, pa: %lx\n", alloc_va, user_va_to_pa(current->pagetable, (void *)alloc_va));
+            sprint("new free block at va: %lx, pa: %lx\n", alloc_va, user_va_to_pa(current[hartid]->pagetable, (void *)alloc_va));
 #endif
             set_flag(new_free_block, 0);
             set_size(new_free_block, PGSIZE - sizeof(pd));
             set_next(new_free_block, NULL);
-            insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block, PD_CMP_FUNC);
-            alloc_va = current->user_heap.mem_rib.alloc(n, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
+            insert_free_block(&current[hartid]->user_heap.mem_rib.free_list, new_free_block, PD_CMP_FUNC);
+            alloc_va = current[hartid]->user_heap.mem_rib.alloc(n, &current[hartid]->user_heap.mem_rib.free_list, &current[hartid]->user_heap.mem_rib.alloc_list);
             if (alloc_va != (uint64)NULL) {
                 return alloc_va + sizeof(pd);
             } else {
@@ -142,19 +174,19 @@ uint64 sys_user_allocate_mem(int n) {
         int original_n = n;
         // 跨页分配策略：
         // 尝试在现有空闲链表中找到是否有大块
-        uint64 alloc_va = current->user_heap.mem_rib.alloc(n, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
+        uint64 alloc_va = current[hartid]->user_heap.mem_rib.alloc(n, &current[hartid]->user_heap.mem_rib.free_list, &current[hartid]->user_heap.mem_rib.alloc_list);
         if (alloc_va != (uint64)NULL) {
             return alloc_va + sizeof(pd);
         }
 
         // 没有大块，从当前虚拟地址最大的位置开始分配连续的页
         pd *highest_block = NULL;
-        for (pd *block = current->user_heap.mem_rib.free_list; block != NULL; block = get_next(block)) {
+        for (pd *block = current[hartid]->user_heap.mem_rib.free_list; block != NULL; block = get_next(block)) {
             if (highest_block == NULL || (uint64)block > (uint64)highest_block) {
                 highest_block = block;
             }
         }
-        if ((uint64)highest_block + get_size(highest_block) + sizeof(pd) < current->user_heap.heap_top) {
+        if ((uint64)highest_block + get_size(highest_block) + sizeof(pd) < current[hartid]->user_heap.heap_top) {
             highest_block = NULL;
         }
         uint64 start_va = 0;
@@ -162,7 +194,7 @@ uint64 sys_user_allocate_mem(int n) {
         if (highest_block != NULL) {
             start_va = (uint64)highest_block;
             // 从空闲链表移除这个块
-            remove_from_pd_list(&current->user_heap.mem_rib.free_list, highest_block);
+            remove_from_pd_list(&current[hartid]->user_heap.mem_rib.free_list, highest_block);
             n = n - get_size(highest_block);
         } else {
             // 先分配一页
@@ -170,11 +202,11 @@ uint64 sys_user_allocate_mem(int n) {
             if (pa == NULL) {
                 return (uint64)NULL;
             }
-            current->mapped_info[HEAP_SEGMENT].npages++;
-            uint64 alloc_va = current->user_heap.heap_top;
-            user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
+            current[hartid]->mapped_info[HEAP_SEGMENT].npages++;
+            uint64 alloc_va = current[hartid]->user_heap.heap_top;
+            user_vm_map((pagetable_t)current[hartid]->pagetable, alloc_va, PGSIZE, (uint64)pa,
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
-            current->user_heap.heap_top += PGSIZE;
+            current[hartid]->user_heap.heap_top += PGSIZE;
             start_va = alloc_va;
             set_size((pd *)start_va, PGSIZE - sizeof(pd));
             n = n - (PGSIZE - sizeof(pd));
@@ -187,15 +219,15 @@ uint64 sys_user_allocate_mem(int n) {
                 pd *new_alloc_block = (pd *)start_va;
                 set_flag(new_alloc_block, 0);
                 set_size(new_alloc_block, (i - 1) * PGSIZE + get_size((pd *)start_va));
-                insert_free_block(&current->user_heap.mem_rib.free_list, new_alloc_block, PD_CMP_FUNC);
+                insert_free_block(&current[hartid]->user_heap.mem_rib.free_list, new_alloc_block, PD_CMP_FUNC);
 
                 return (uint64)NULL;
             }
-            current->mapped_info[HEAP_SEGMENT].npages++;
-            uint64 alloc_va = current->user_heap.heap_top;
-            user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
+            current[hartid]->mapped_info[HEAP_SEGMENT].npages++;
+            uint64 alloc_va = current[hartid]->user_heap.heap_top;
+            user_vm_map((pagetable_t)current[hartid]->pagetable, alloc_va, PGSIZE, (uint64)pa,
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
-            current->user_heap.heap_top += PGSIZE;
+            current[hartid]->user_heap.heap_top += PGSIZE;
         }
         if (i * PGSIZE != n) {
             // 最后剩余的部分再分配一页
@@ -204,26 +236,26 @@ uint64 sys_user_allocate_mem(int n) {
                 pd *new_alloc_block = (pd *)start_va;
                 set_flag(new_alloc_block, 0);
                 set_size(new_alloc_block, (i - 1) * PGSIZE + get_size((pd *)start_va));
-                insert_free_block(&current->user_heap.mem_rib.free_list, new_alloc_block, PD_CMP_FUNC);
+                insert_free_block(&current[hartid]->user_heap.mem_rib.free_list, new_alloc_block, PD_CMP_FUNC);
 
                 return (uint64)NULL;
             }
-            current->mapped_info[HEAP_SEGMENT].npages++;
-            uint64 alloc_va = current->user_heap.heap_top;
-            user_vm_map((pagetable_t)current->pagetable, alloc_va, PGSIZE, (uint64)pa,
+            current[hartid]->mapped_info[HEAP_SEGMENT].npages++;
+            uint64 alloc_va = current[hartid]->user_heap.heap_top;
+            user_vm_map((pagetable_t)current[hartid]->pagetable, alloc_va, PGSIZE, (uint64)pa,
                         prot_to_type(PROT_WRITE | PROT_READ, 1));
-            current->user_heap.heap_top += PGSIZE;
+            current[hartid]->user_heap.heap_top += PGSIZE;
             uint64 free_va = alloc_va + n - i * PGSIZE;
             pd *new_free_block = (pd *)free_va;
             set_flag(new_free_block, 0);
             set_size(new_free_block, PGSIZE - (n - i * PGSIZE) - sizeof(pd));
             set_next(new_free_block, NULL);
-            insert_free_block(&current->user_heap.mem_rib.free_list, new_free_block, PD_CMP_FUNC);
+            insert_free_block(&current[hartid]->user_heap.mem_rib.free_list, new_free_block, PD_CMP_FUNC);
         }
         pd *new_alloc_block = (pd *)start_va;
         set_flag(new_alloc_block, 1);
         set_size(new_alloc_block, original_n);
-        insert_alloc_block(&current->user_heap.mem_rib.alloc_list, new_alloc_block);
+        insert_alloc_block(&current[hartid]->user_heap.mem_rib.alloc_list, new_alloc_block);
         return start_va + sizeof(pd);
     }
 }
@@ -239,18 +271,21 @@ inline uint64 sys_user_allocate_page() {
 // reclaim a page, indicated by "va". added @lab2_2
 //
 uint64 sys_user_free_mem(uint64 va) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
     va = va - sizeof(pd);
 #ifdef MEM_DEBUG
     sprint("=====================\n");
     sprint("to free at sys_user_free_mem: va: %lx\n", va);
-    for (pd *i = current->user_heap.mem_rib.alloc_list; i != NULL; i = get_next(i)) {
+    for (pd *i = current[hartid]->user_heap.mem_rib.alloc_list; i != NULL; i = get_next(i)) {
         sprint("alloc list item: %lx\n", (uint64)i);
     }
 #endif
-    current->user_heap.mem_rib.free(va, &current->user_heap.mem_rib.free_list, &current->user_heap.mem_rib.alloc_list);
+    current[hartid]->user_heap.mem_rib.free(va, &current[hartid]->user_heap.mem_rib.free_list, &current[hartid]->user_heap.mem_rib.alloc_list);
 #ifdef MEM_DEBUG
     sprint("after free:\n");
-    for (pd *i = current->user_heap.mem_rib.alloc_list; i != NULL; i = get_next(i)) {
+    for (pd *i = current[hartid]->user_heap.mem_rib.alloc_list; i != NULL; i = get_next(i)) {
         sprint("alloc list item: %lx\n", (uint64)i);
     }
     sprint("===================\n");
@@ -271,8 +306,11 @@ inline uint64 sys_user_free_page(uint64 va) {
 // kerenl entry point of naive_fork
 //
 ssize_t sys_user_fork() {
-    sprint("User call fork.\n");
-    return do_fork(current);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    sprint("hartid = %d: User call fork.\n", hartid);
+    return do_fork(current[hartid]);
 }
 
 //
@@ -283,8 +321,11 @@ ssize_t sys_user_yield() {
     // hint: the functionality of yield is to give up the processor. therefore,
     // we should set the status of currently running process to READY, insert it in
     // the rear of ready queue, and finally, schedule a READY process to run.
-    current->status = READY;
-    insert_to_ready_queue(current);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    current[hartid]->status = READY;
+    insert_to_ready_queue(current[hartid]);
     schedule();
     return 0;
 }
@@ -334,8 +375,11 @@ ssize_t sys_user_sem_V(int semid) {
 }
 
 ssize_t sys_user_printpa(uint64 va) {
-    uint64 pa = (uint64)user_va_to_pa((pagetable_t)(current->pagetable), (void *)va);
-    sprint("%lx\n", pa);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    uint64 pa = (uint64)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)va);
+    sprint("hartid = %d: %lx\n", hartid, pa);
     return 0;
 }
 
@@ -343,7 +387,10 @@ ssize_t sys_user_printpa(uint64 va) {
 // open file
 //
 ssize_t sys_user_open(char *pathva, int flags) {
-    char *pathpa = (char *)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pathpa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), pathva);
     return do_open(pathpa, flags);
 }
 
@@ -351,10 +398,13 @@ ssize_t sys_user_open(char *pathva, int flags) {
 // read file
 //
 ssize_t sys_user_read(int fd, char *bufva, uint64 count) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
     int i = 0;
     while (i < count) { // count can be greater than page size
         uint64 addr = (uint64)bufva + i;
-        uint64 pa = lookup_pa((pagetable_t)current->pagetable, addr);
+        uint64 pa = lookup_pa((pagetable_t)current[hartid]->pagetable, addr);
         uint64 off = addr - ROUNDDOWN(addr, PGSIZE);
         uint64 len = count - i < PGSIZE - off ? count - i : PGSIZE - off;
         uint64 r = do_read(fd, (char *)pa + off, len);
@@ -368,10 +418,13 @@ ssize_t sys_user_read(int fd, char *bufva, uint64 count) {
 // write file
 //
 ssize_t sys_user_write(int fd, char *bufva, uint64 count) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
     int i = 0;
     while (i < count) { // count can be greater than page size
         uint64 addr = (uint64)bufva + i;
-        uint64 pa = lookup_pa((pagetable_t)current->pagetable, addr);
+        uint64 pa = lookup_pa((pagetable_t)current[hartid]->pagetable, addr);
         uint64 off = addr - ROUNDDOWN(addr, PGSIZE);
         uint64 len = count - i < PGSIZE - off ? count - i : PGSIZE - off;
         uint64 r = do_write(fd, (char *)pa + off, len);
@@ -392,7 +445,10 @@ ssize_t sys_user_lseek(int fd, int offset, int whence) {
 // read vinode
 //
 ssize_t sys_user_stat(int fd, struct istat *istat) {
-    struct istat *pistat = (struct istat *)user_va_to_pa((pagetable_t)(current->pagetable), istat);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    struct istat *pistat = (struct istat *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), istat);
     return do_stat(fd, pistat);
 }
 
@@ -400,7 +456,10 @@ ssize_t sys_user_stat(int fd, struct istat *istat) {
 // read disk inode
 //
 ssize_t sys_user_disk_stat(int fd, struct istat *istat) {
-    struct istat *pistat = (struct istat *)user_va_to_pa((pagetable_t)(current->pagetable), istat);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    struct istat *pistat = (struct istat *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), istat);
     return do_disk_stat(fd, pistat);
 }
 
@@ -415,7 +474,10 @@ ssize_t sys_user_close(int fd) {
 // lib call to opendir
 //
 ssize_t sys_user_opendir(char *pathva) {
-    char *pathpa = (char *)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pathpa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), pathva);
     return do_opendir(pathpa);
 }
 
@@ -423,7 +485,10 @@ ssize_t sys_user_opendir(char *pathva) {
 // lib call to readdir
 //
 ssize_t sys_user_readdir(int fd, struct dir *vdir) {
-    struct dir *pdir = (struct dir *)user_va_to_pa((pagetable_t)(current->pagetable), vdir);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    struct dir *pdir = (struct dir *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), vdir);
     return do_readdir(fd, pdir);
 }
 
@@ -431,7 +496,10 @@ ssize_t sys_user_readdir(int fd, struct dir *vdir) {
 // lib call to mkdir
 //
 ssize_t sys_user_mkdir(char *pathva) {
-    char *pathpa = (char *)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pathpa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), pathva);
     return do_mkdir(pathpa);
 }
 
@@ -446,8 +514,11 @@ ssize_t sys_user_closedir(int fd) {
 // lib call to link
 //
 ssize_t sys_user_link(char *vfn1, char *vfn2) {
-    char *pfn1 = (char *)user_va_to_pa((pagetable_t)(current->pagetable), (void *)vfn1);
-    char *pfn2 = (char *)user_va_to_pa((pagetable_t)(current->pagetable), (void *)vfn2);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pfn1 = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)vfn1);
+    char *pfn2 = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)vfn2);
     return do_link(pfn1, pfn2);
 }
 
@@ -455,7 +526,10 @@ ssize_t sys_user_link(char *vfn1, char *vfn2) {
 // lib call to unlink
 //
 ssize_t sys_user_unlink(char *vfn) {
-    char *pfn = (char *)user_va_to_pa((pagetable_t)(current->pagetable), (void *)vfn);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pfn = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)vfn);
     return do_unlink(pfn);
 }
 
@@ -472,8 +546,11 @@ ssize_t sys_user_wait(int64 pid) {
 }
 
 ssize_t sys_user_exec(char *command, char *para) {
-    char *pfn1 = (char *)user_va_to_pa((pagetable_t)current->pagetable, (void *)command);
-    char *pfn2 = (char *)user_va_to_pa((pagetable_t)current->pagetable, (void *)para);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pfn1 = (char *)user_va_to_pa((pagetable_t)current[hartid]->pagetable, (void *)command);
+    char *pfn2 = (char *)user_va_to_pa((pagetable_t)current[hartid]->pagetable, (void *)para);
     return do_exec(pfn1, pfn2);
 }
 
@@ -481,7 +558,10 @@ ssize_t sys_user_exec(char *command, char *para) {
 // lib call to read current working directory
 //
 ssize_t sys_user_rcwd(char *pathva) {
-    char *pathpa = (char *)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pathpa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), pathva);
     return do_rcwd(pathpa);
 }
 
@@ -489,7 +569,10 @@ ssize_t sys_user_rcwd(char *pathva) {
 // lib call to change current working directory
 //
 ssize_t sys_user_ccwd(char *pathva) {
-    char *pathpa = (char *)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pathpa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), pathva);
     return do_ccwd(pathpa);
 }
 
@@ -502,6 +585,10 @@ ssize_t sys_user_ccwd(char *pathva) {
  * @copyright Copyright (c) 2025
  */
 ssize_t sys_user_print_backtrace(int depth) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+
     if (depth <= 0) {
         return EINVAL;
     }
@@ -511,12 +598,12 @@ ssize_t sys_user_print_backtrace(int depth) {
     // 当前的返回函数地址
     uint64 cur_ra_va, cur_ra_pa;
     // 当前栈帧的基址指针
-    uint64 *cur_sb_va = (uint64 *)current->trapframe->regs.sp;
+    uint64 *cur_sb_va = (uint64 *)current[hartid]->trapframe->regs.sp;
     uint64 *cur_sb_pa;
     // 先从print_backtrace中跳出
     cur_fp_va = (uint64 *)((uint64)cur_sb_va + 32); // 到上一个函数的调用栈栈底
     cur_sb_va = (uint64 *)((uint64)cur_fp_va + 8);  // 上一个函数调用栈的基址
-    cur_sb_pa = (uint64 *)user_va_to_pa(current->pagetable, (void *)cur_sb_va);
+    cur_sb_pa = (uint64 *)user_va_to_pa(current[hartid]->pagetable, (void *)cur_sb_va);
     cur_ra_va = *cur_sb_pa; // 到调用print_backtrace的返回地址
 
 #ifdef SYS_USER_PRINT_BACKTRACE_DEBUG
@@ -527,7 +614,7 @@ ssize_t sys_user_print_backtrace(int depth) {
         else
             sprint("   ");
         // sprint("Stack dump [0x%016lx]: 0x%016lx\n", current->trapframe->regs.sp + 32 + i * sizeof(uint64), *(uint64 *)(current->trapframe->regs.sp + 32 + i * sizeof(uint64)));
-        uint64 addr = (uint64)user_va_to_pa(current->pagetable, (void *)(current->trapframe->regs.sp + 32 + i * sizeof(uint64)));
+        uint64 addr = (uint64)user_va_to_pa(current[hartid]->pagetable, (void *)(current[hartid]->trapframe->regs.sp + 32 + i * sizeof(uint64)));
         sprint("Stack dump [0x%016lx]: 0x%016lx", current->trapframe->regs.sp + 32 + i * sizeof(uint64), *(uint64 *)(addr));
         const char *func_name = elf_find_symbol_by_addr(addr);
         if (func_name) {
@@ -541,7 +628,7 @@ ssize_t sys_user_print_backtrace(int depth) {
 #endif
 
     while (depth > 0) {
-        cur_ra_pa = (uint64)user_va_to_pa(current->pagetable, (void *)cur_ra_va);
+        cur_ra_pa = (uint64)user_va_to_pa(current[hartid]->pagetable, (void *)cur_ra_va);
         const char *func_name = elf_find_symbol_by_addr(cur_ra_va);
         if (func_name == NULL) {
             sprint("  [0x%016lx]j <unknown>\n", cur_ra_va);
@@ -552,9 +639,9 @@ ssize_t sys_user_print_backtrace(int depth) {
         } else {
             sprint("%s\n", func_name);
             depth--;
-            cur_fp_pa = user_va_to_pa(current->pagetable, (void *)cur_fp_va);
+            cur_fp_pa = user_va_to_pa(current[hartid]->pagetable, (void *)cur_fp_va);
             cur_sb_va = (uint64 *)((uint64)(*cur_fp_pa) - 8); // 到调用函数的栈帧基址
-            cur_sb_pa = (uint64 *)user_va_to_pa(current->pagetable, (void *)cur_sb_va);
+            cur_sb_pa = (uint64 *)user_va_to_pa(current[hartid]->pagetable, (void *)cur_sb_va);
             cur_ra_va = *cur_sb_pa;                        // 到调用函数的返回地址
             cur_fp_va = (uint64 *)((uint64)cur_sb_va - 8); // 更新栈帧指针
         }

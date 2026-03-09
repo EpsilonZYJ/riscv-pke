@@ -87,10 +87,12 @@ void print_error_msg(process *proc) {
 }
 
 static void handle_instruction_access_fault() {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_instruction_access_fault: entered\n");
 #endif
-    print_error_msg(current);
+    print_error_msg(current[hartid]);
 
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_instruction_access_fault: about to panic\n");
@@ -99,11 +101,13 @@ static void handle_instruction_access_fault() {
 }
 
 static void handle_load_access_fault() {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_load_access_fault: entered\n");
 #endif
 
-    print_error_msg(current);
+    print_error_msg(current[hartid]);
 
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_load_access_fault: about to panic\n");
@@ -113,11 +117,13 @@ static void handle_load_access_fault() {
 }
 
 static void handle_store_access_fault() {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_store_access_fault: entered\n");
 #endif
 
-    print_error_msg(current);
+    print_error_msg(current[hartid]);
 
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_store_access_fault: about to panic\n");
@@ -127,11 +133,13 @@ static void handle_store_access_fault() {
 }
 
 static void handle_illegal_instruction() {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_illegal_instruction: entered\n");
 #endif
 
-    print_error_msg(current);
+    print_error_msg(current[hartid]);
 
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_illegal_instruction: about to panic\n");
@@ -141,11 +149,13 @@ static void handle_illegal_instruction() {
 }
 
 static void handle_misaligned_load() {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_misaligned_load: entered\n");
 #endif
 
-    print_error_msg(current);
+    print_error_msg(current[hartid]);
 
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_misaligned_load: about to panic\n");
@@ -155,10 +165,12 @@ static void handle_misaligned_load() {
 }
 
 static void handle_misaligned_store() {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_misaligned_store: entered\n");
 #endif
-    print_error_msg(current);
+    print_error_msg(current[hartid]);
 
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_misaligned_store: about to panic\n");
@@ -169,7 +181,7 @@ static void handle_misaligned_store() {
 
 // added @lab1_3
 static void handle_timer() {
-    int cpuid = 0;
+    int cpuid = read_csr(mhartid);
     // setup the timer fired at next time (TIMER_INTERVAL from now)
     *(uint64 *)CLINT_MTIMECMP(cpuid) = *(uint64 *)CLINT_MTIMECMP(cpuid) + TIMER_INTERVAL;
 

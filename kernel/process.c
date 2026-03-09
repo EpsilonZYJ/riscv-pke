@@ -31,16 +31,18 @@ extern char trap_sec_start[];
 process procs[NPROC];
 
 // current points to the currently running user-mode application.
-process *current = NULL;
+process *current[NCPU];
 
-process *block_queue_head = NULL;
+process *block_queue_head[NCPU];
 
 //
 // switch to a user-mode process
 //
 void switch_to(process *proc) {
     assert(proc);
-    current = proc;
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    current[hartid] = proc;
 
     // write the smode_trap_vector (64-bit func. address) defined in kernel/strap_vector.S
     // to the stvec privilege register, such that trap handler pointed by smode_trap_vector
@@ -180,38 +182,50 @@ int free_process(process *proc) {
 }
 
 void set_next(pd *node, pd *next) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
     if (node == NULL) return;
-    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    pd *node_pa = user_va_to_pa(current[hartid]->pagetable, (void *)node);
     node_pa->next = next;
 }
 
 pd *get_next(pd *node) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
     if (node == NULL) return NULL;
-    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    pd *node_pa = user_va_to_pa(current[hartid]->pagetable, (void *)node);
     return node_pa->next;
 }
 
 void set_flag(pd *node, int flag) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
     if (node == NULL) return;
-    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    pd *node_pa = user_va_to_pa(current[hartid]->pagetable, (void *)node);
     node_pa->flag = flag;
 }
 
 int get_flag(pd *node) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
     if (node == NULL) return -1;
-    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    pd *node_pa = user_va_to_pa(current[hartid]->pagetable, (void *)node);
     return node_pa->flag;
 }
 
 void set_size(pd *node, uint64 size) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
     if (node == NULL) return;
-    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    pd *node_pa = user_va_to_pa(current[hartid]->pagetable, (void *)node);
     node_pa->size = size;
 }
 
 uint64 get_size(pd *node) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
     if (node == NULL) return 0;
-    pd *node_pa = user_va_to_pa(current->pagetable, (void *)node);
+    pd *node_pa = user_va_to_pa(current[hartid]->pagetable, (void *)node);
     return node_pa->size;
 }
 

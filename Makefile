@@ -64,6 +64,13 @@ SPIKE_INF_LIB   := $(OBJ_DIR)/spike_interface.a
 
 
 #---------------------	user   -----------------------
+
+USER_MULTIMEM_LDS0  := user/user0.lds
+USER_MULTIMEM_LDS1  := user/user1.lds
+
+USER_MULTIMEM_CPP0 		:= user/app0.c user/user_lib.c
+USER_MULTIMEM_CPP1 		:= user/app1.c user/user_lib.c
+
 USER_SHELL_CPPS 	:= user/app_shell.c user/user_lib.c
 
 USER_EXEC_CPPS 		:= user/app_exec.c user/user_lib.c
@@ -86,6 +93,9 @@ USER_ERROR_CPPS		:= user/app_errorline.c user/user_lib.c
 
 #--
 
+USER_MULTIMEM_OBJ0	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_MULTIMEM_CPP0)))
+USER_MULTIMEM_OBJ1	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_MULTIMEM_CPP1)))
+
 USER_SHELL_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SHELL_CPPS)))
 
 USER_EXEC_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_EXEC_CPPS)))
@@ -107,6 +117,9 @@ USER_PRINT_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_PRINT_CP
 USER_ERROR_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_ERROR_CPPS)))
 
 #--
+
+USER_MULTIMEM_TARGET0 	:= $(OBJ_DIR)/app0
+USER_MULTIMEM_TARGET1 	:= $(OBJ_DIR)/app1
 
 USER_SHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/app_shell
 
@@ -175,6 +188,8 @@ $(OBJ_DIR):
 	@-mkdir -p $(dir $(USER_SING_OBJS))
 	@-mkdir -p $(dir $(USER_PRINT_OBJS))
 	@-mkdir -p $(dir $(USER_ERROR_OBJS))
+	@-mkdir -p $(dir $(USER_MULTIMEM_OBJ0))
+	@-mkdir -p $(dir $(USER_MULTIMEM_OBJ1))
 	@-mkdir -p $(dir $(USER_E_OBJS))
 	@-mkdir -p $(dir $(USER_M_OBJS))
 	@-mkdir -p $(dir $(USER_T_OBJS))
@@ -274,6 +289,16 @@ $(USER_ERROR_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_ERROR_OBJS)
 	@echo "User app has been built into" \"$@\"
 	@cp $@ $(OBJ_DIR)
 
+$(USER_MULTIMEM_TARGET0): $(OBJ_DIR) $(UTIL_LIB) $(USER_MULTIMEM_OBJ0) $(USER_MULTIMEM_LDS0)
+	@echo "linking" $@	...
+	@$(COMPILE) $(USER_MULTIMEM_OBJ0) $(UTIL_LIB) -o $@ -T $(USER_MULTIMEM_LDS0)
+	@echo "User app has been built into" \"$@\"
+
+$(USER_MULTIMEM_TARGET1): $(OBJ_DIR) $(UTIL_LIB) $(USER_MULTIMEM_OBJ1) $(USER_MULTIMEM_LDS1)
+	@echo "linking" $@	...
+	@$(COMPILE) $(USER_MULTIMEM_OBJ1) $(UTIL_LIB) -o $@ -T $(USER_MULTIMEM_LDS1)
+	@echo "User app has been built into" \"$@\"
+
 $(USER_E_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_E_OBJS)
 	@echo "linking" $@	...
 	-@mkdir -p $(HOSTFS_ROOT)/bin
@@ -309,10 +334,10 @@ $(USER_O_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_O_OBJS)
 
 .DEFAULT_GOAL := $(all)
 
-all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_PRINT_TARGET) $(USER_ERROR_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_PRINT_TARGET) $(USER_ERROR_TARGET) $(USER_MULTIMEM_TARGET0) $(USER_MULTIMEM_TARGET1) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 .PHONY:all
 
-run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_PRINT_TARGET) $(USER_ERROR_TARGET) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_PRINT_TARGET) $(USER_ERROR_TARGET) $(USER_MULTIMEM_TARGET0) $(USER_MULTIMEM_TARGET1) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 	@echo "********************HUST PKE********************"
 	@echo "********************APP SHELL*********************"
 	spike $(KERNEL_TARGET) /bin/app_shell
@@ -334,6 +359,8 @@ run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGE
 	spike $(KERNEL_TARGET) /bin/app_print_backtrace
 	@echo "********************APP ERROR*********************"
 	spike $(KERNEL_TARGET) /bin/app_errorline
+	@echo "******************APP MULTIMEM********************"
+	spike -p2 $(KERNEL_TARGET) /bin/app0 /bin/app1
 
 # need openocd!
 gdb:$(KERNEL_TARGET) $(USER_SHELL_TARGET)

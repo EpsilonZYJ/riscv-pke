@@ -3,8 +3,8 @@
 
 #include "util/macro.h"
 
-// we use only one HART (cpu) in fundamental experiments
-#define NCPU 1
+// we use two HART (cpu) in challenge3
+#define NCPU 2
 
 // 信号量最大支持数目
 #define NSEMAPHORE 16
@@ -29,5 +29,7 @@
 #define ALLOC_FUNC EXPAND_CONCAT(MEM_ALLOC_STRATEGY, _alloc)
 #define FREE_FUNC EXPAND_CONCAT(MEM_ALLOC_STRATEGY, _free)
 #define PD_CMP_FUNC EXPAND_CONCAT(pd_, EXPAND_CONCAT(MEM_ALLOC_STRATEGY, _cmp))
+
+#define VM_SIZE_PER_HART 0x04000000
 
 #endif

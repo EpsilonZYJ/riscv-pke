@@ -23,6 +23,10 @@
 //
 extern char trap_sec_start[];
 
+// FIXME: deal with user app
+// // process is a structure defined in kernel/process.h
+// process user_app[NCPU];
+
 //
 // turn on paging. added @lab2_1
 //
@@ -85,11 +89,14 @@ process *load_user_program() {
 // s_start: S-mode entry point of riscv-pke OS kernel.
 //
 int s_start(void) {
-    sprint("Enter supervisor mode...\n");
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    sprint("hartid = %d: Enter supervisor mode...\n", hartid);
     // in the beginning, we use Bare mode (direct) memory mapping as in lab1.
     // but now, we are going to switch to the paging mode @lab2_1.
     // note, the code still works in Bare mode when calling pmm_init() and kern_vm_init().
     write_csr(satp, 0);
+    // FIXME: 修复池
 
     // init phisical memory manager
     pmm_init();
@@ -100,7 +107,7 @@ int s_start(void) {
     // now, switch to paging mode by turning on paging (SV39)
     enable_paging();
     // the code now formally works in paging mode, meaning the page table is now in use.
-    sprint("kernel page table is on \n");
+    sprint("hartid = %d: kernel page table is on \n", hartid);
 
     // added @lab3_1
     init_proc_pool();
@@ -110,7 +117,7 @@ int s_start(void) {
 
     init_semaphore_pool();
 
-    sprint("Switch to user mode...\n");
+    sprint("hartid = %d: Switch to user mode...\n", hartid);
     // the application code (elf) is first loaded into memory, and then put into execution
     // added @lab3_1
     insert_to_ready_queue(load_user_program());
