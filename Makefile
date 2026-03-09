@@ -96,8 +96,8 @@ USER_ERROR_CPPS		:= user/app_errorline.c user/user_lib.c
 
 #--
 
-USER_MULTI_OBJ0	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_MULTI_CPP0)))
-USER_MULTI_OBJ1	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_MULTI_CPP1)))
+USER_MULTI_OBJ0		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_MULTI_CPP0)))
+USER_MULTI_OBJ1		:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_MULTI_CPP1)))
 
 USER_MULTIMEM_OBJ0	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_MULTIMEM_CPP0)))
 USER_MULTIMEM_OBJ1	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_MULTIMEM_CPP1)))
@@ -310,14 +310,14 @@ $(USER_MULTI_TARGET1): $(OBJ_DIR) $(UTIL_LIB) $(USER_MULTI_OBJ1) $(USER_MULTI_LD
 	@$(COMPILE) $(USER_MULTI_OBJ1) $(UTIL_LIB) -o $@ -T $(USER_MULTI_LDS1)
 	@echo "User app has been built into" \"$@\"
 
-$(USER_MULTIMEM_TARGET0): $(OBJ_DIR) $(UTIL_LIB) $(USER_MULTIMEM_OBJ0) $(USER_MULTIMEM_LDS0)
+$(USER_MULTIMEM_TARGET0): $(OBJ_DIR) $(UTIL_LIB) $(USER_MULTIMEM_OBJ0)
 	@echo "linking" $@	...
-	@$(COMPILE) $(USER_MULTIMEM_OBJ0) $(UTIL_LIB) -o $@ -T $(USER_MULTIMEM_LDS0)
+	@$(COMPILE) $(USER_MULTIMEM_OBJ0) $(UTIL_LIB) -o $@
 	@echo "User app has been built into" \"$@\"
 
-$(USER_MULTIMEM_TARGET1): $(OBJ_DIR) $(UTIL_LIB) $(USER_MULTIMEM_OBJ1) $(USER_MULTIMEM_LDS1)
+$(USER_MULTIMEM_TARGET1): $(OBJ_DIR) $(UTIL_LIB) $(USER_MULTIMEM_OBJ1)
 	@echo "linking" $@	...
-	@$(COMPILE) $(USER_MULTIMEM_OBJ1) $(UTIL_LIB) -o $@ -T $(USER_MULTIMEM_LDS1)
+	@$(COMPILE) $(USER_MULTIMEM_OBJ1) $(UTIL_LIB) -o $@
 	@echo "User app has been built into" \"$@\"
 
 $(USER_E_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_E_OBJS)
