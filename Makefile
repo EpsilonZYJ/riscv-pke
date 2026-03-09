@@ -65,11 +65,11 @@ SPIKE_INF_LIB   := $(OBJ_DIR)/spike_interface.a
 
 #---------------------	user   -----------------------
 
-USER_MULTIMEM_LDS0  := user/user0.lds
-USER_MULTIMEM_LDS1  := user/user1.lds
+USER_MULTIMEM_LDS0  := user/user_multimem_0.lds
+USER_MULTIMEM_LDS1  := user/user_multimem_1.lds
 
-USER_MULTIMEM_CPP0 		:= user/app0.c user/user_lib.c
-USER_MULTIMEM_CPP1 		:= user/app1.c user/user_lib.c
+USER_MULTIMEM_CPP0 		:= user/app_multimem_0.c user/user_lib.c
+USER_MULTIMEM_CPP1 		:= user/app_multimem_1.c user/user_lib.c
 
 USER_SHELL_CPPS 	:= user/app_shell.c user/user_lib.c
 
@@ -118,8 +118,8 @@ USER_ERROR_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_ERROR_CP
 
 #--
 
-USER_MULTIMEM_TARGET0 	:= $(HOSTFS_ROOT)/bin/app0
-USER_MULTIMEM_TARGET1 	:= $(HOSTFS_ROOT)/bin/app1
+USER_MULTIMEM_TARGET0 	:= $(HOSTFS_ROOT)/bin/app_multimem_0
+USER_MULTIMEM_TARGET1 	:= $(HOSTFS_ROOT)/bin/app_multimem_1
 
 USER_SHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/app_shell
 
@@ -360,7 +360,7 @@ run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGE
 	@echo "********************APP ERROR*********************"
 	spike $(KERNEL_TARGET) /bin/app_errorline
 	@echo "******************APP MULTIMEM********************"
-	spike -p2 $(KERNEL_TARGET) /bin/app0 /bin/app1
+	spike -p2 $(KERNEL_TARGET) /bin/app_multimem_0 /bin/app_multimem_1
 
 # need openocd!
 gdb:$(KERNEL_TARGET) $(USER_SHELL_TARGET)
