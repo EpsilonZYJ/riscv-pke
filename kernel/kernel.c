@@ -111,14 +111,6 @@ int s_start(void) {
         // build the kernel page table
         kern_vm_init();
 
-        // now, switch to paging mode by turning on paging (SV39)
-        enable_paging();
-
-#ifdef INIT_OUTPUT
-        // the code now formally works in paging mode, meaning the page table is now in use.
-        sprint("kernel page table is on \n", hartid);
-#endif
-
         // added @lab3_1
         init_proc_pool();
 
@@ -128,12 +120,33 @@ int s_start(void) {
         init_semaphore_pool();
     }
 
+#ifdef INIT_OUTPUT
+    sprint("[DEBUG] hartid = %d: s_start: wait for all NCPU.\n", hartid);
+#endif
+
     sync_barrier(&s_counter, NCPU);
+
+#ifdef INIT_OUTPUT
+    sprint("[DEBUG] hartid = %d: s_start: syncronized.\n", hartid);
+#endif
+    // hart 1 (and other non-zero harts) must also enable paging using the
+    // kernel page table that hart 0 has already set up.
+    // now, switch to paging mode by turning on paging (SV39)
+    enable_paging();
+
+#ifdef INIT_OUTPUT
+    // the code now formally works in paging mode, meaning the page table is now in use.
+    sprint("hartid = %d: kernel page table is on \n", hartid);
+#endif
 
     sprint("hartid = %d: Switch to user mode...\n", hartid);
     // the application code (elf) is first loaded into memory, and then put into execution
     // added @lab3_1
     insert_to_ready_queue(load_user_program());
+#ifdef INIT_DEBUG
+    sprint("[DEBUG] s_start: load user program and insert to ready queue successfully.\n");
+#endif
+
     schedule();
 
     // we should never reach here.

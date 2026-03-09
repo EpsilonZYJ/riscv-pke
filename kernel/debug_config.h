@@ -11,9 +11,10 @@
 // #define ELF_C_DEBUG
 // #define MTRAP_C_DEBUG
 // #define MULTICORE_MEM_DEBUG
+// #define INIT_DEBUG
 
-// #define FILE_SYSTEM_OUTPUT
-// #define PROCESS_SYSTEM_OUTPUT
-// #define INIT_OUTPUT
+#define FILE_SYSTEM_OUTPUT
+#define PROCESS_SYSTEM_OUTPUT
+#define INIT_OUTPUT
 
 #endif // RISCV_PKE_DEBUG_H

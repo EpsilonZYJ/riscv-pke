@@ -36,7 +36,7 @@ ssize_t sys_user_print(const char *buf, size_t n) {
     assert(hartid < NCPU);
     assert(current[hartid]);
     char *pa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)buf);
-    sprint("hartid = %d: %s", hartid, pa);
+    sprint("%s", pa);
     return 0;
 }
 

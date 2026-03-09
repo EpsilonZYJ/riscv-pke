@@ -130,6 +130,8 @@ process *alloc_process() {
     uint64 user_stack = (uint64)alloc_page();        // phisical address of user stack bottom
     procs[i].trapframe->regs.sp = USER_STACK_TOP;    // virtual address of user stack top
 
+    procs[i].trapframe->regs.tp = hartid;
+
     // allocates a page to record memory regions (segments)
     procs[i].mapped_info = (mapped_region *)alloc_page();
     memset(procs[i].mapped_info, 0, PGSIZE);
