@@ -156,10 +156,6 @@ static void handle_misaligned_load() {
 }
 
 static void handle_misaligned_store() {
-    print_error_msg(current);
-    panic("Misaligned AMO!");
-}
-static void handle_misaligned_store() {
 #ifdef MTRAP_C_DEBUG
     sprint("[DEBUG]handle_misaligned_store: entered\n");
 #endif
