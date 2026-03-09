@@ -101,6 +101,8 @@ void init_proc_pool() {
 process *alloc_process() {
     // locate the first usable process structure
     int i;
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
 
     spin_lock(&g_proc_alloc_lock);
     for (i = 0; i < NPROC; i++)
@@ -158,8 +160,10 @@ process *alloc_process() {
     procs[i].mapped_info[SYSTEM_SEGMENT].npages = 1;
     procs[i].mapped_info[SYSTEM_SEGMENT].seg_type = SYSTEM_SEGMENT;
 
+#ifdef PROCESS_SYSTEM_OUTPUT
     sprint("in alloc_proc. user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n",
            procs[i].trapframe, procs[i].trapframe->regs.sp, procs[i].kstack);
+#endif
 
     procs[i].user_heap.mem_rib.alloc_list = NULL;
     procs[i].user_heap.mem_rib.free_list = NULL;
@@ -179,7 +183,10 @@ process *alloc_process() {
 
     // initialize files_struct
     procs[i].pfiles = init_proc_file_management();
+
+#ifdef PROCESS_SYSTEM_OUTPUT
     sprint("in alloc_proc. build proc_file_management successfully.\n");
+#endif
 
     // return after initialization.
     return &procs[i];

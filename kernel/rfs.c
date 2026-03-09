@@ -17,6 +17,7 @@
 #include "spike_interface/spike_utils.h"
 #include "util/string.h"
 #include "vfs.h"
+#include "debug_config.h"
 
 /**** vinode inteface ****/
 const struct vinode_ops rfs_i_ops = {
@@ -119,7 +120,10 @@ int rfs_format_dev(struct device *dev) {
         return -1;
     }
 
+#ifdef FILE_SYSTEM_OUTPUT
     sprint("RFS: format %s done!\n", dev->dev_name);
+#endif
+
     return 0;
 }
 

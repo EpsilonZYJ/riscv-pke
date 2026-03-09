@@ -69,6 +69,9 @@ static size_t parse_args(arg_buf *arg_bug_msg) {
 // load_bincode_from_host_elf is defined in elf.c
 //
 process *load_user_program() {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+
     process *proc;
 
     proc = alloc_process();
@@ -81,7 +84,7 @@ process *load_user_program() {
     size_t argc = parse_args(&arg_bug_msg);
     if (!argc) panic("You need to specify the application program!\n");
 
-    load_bincode_from_host_elf(proc, arg_bug_msg.argv[0]);
+    load_bincode_from_host_elf(proc, arg_bug_msg.argv[hartid]);
 
 #ifdef MULTICORE_MEM_DEBUG
     sprint("[DEBUG]load_user_program: Loaded user program %s with argc=%d\n", arg_bug_msg.argv[0], argc);
@@ -110,8 +113,11 @@ int s_start(void) {
 
         // now, switch to paging mode by turning on paging (SV39)
         enable_paging();
+
+#ifdef INIT_OUTPUT
         // the code now formally works in paging mode, meaning the page table is now in use.
         sprint("kernel page table is on \n", hartid);
+#endif
 
         // added @lab3_1
         init_proc_pool();

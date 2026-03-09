@@ -290,10 +290,14 @@ elf_status elf_load(elf_ctx *ctx) {
         // SEGMENT_READABLE, SEGMENT_EXECUTABLE, SEGMENT_WRITABLE are defined in kernel/elf.h
         if (ph_addr.flags == (SEGMENT_READABLE | SEGMENT_EXECUTABLE)) {
             ((process *)(((elf_info *)(ctx->info))->p))->mapped_info[j].seg_type = CODE_SEGMENT;
+#ifdef INIT_OUTPUT
             sprint("CODE_SEGMENT added at mapped info offset:%d\n", j);
+#endif
         } else if (ph_addr.flags == (SEGMENT_READABLE | SEGMENT_WRITABLE)) {
             ((process *)(((elf_info *)(ctx->info))->p))->mapped_info[j].seg_type = DATA_SEGMENT;
+#ifdef INIT_OUTPUT
             sprint("DATA_SEGMENT added at mapped info offset:%d\n", j);
+#endif
         } else
             panic("unknown program segment encountered, segment flag:%d.\n", ph_addr.flags);
 
