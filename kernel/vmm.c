@@ -224,8 +224,11 @@ void print_proc_vmspace(process *proc) {
 }
 
 uint64 pa_to_user_va(pagetable_t page_dir, uint64 pa) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
     uint64 map_pa;
-    for (uint64 va = USER_FREE_ADDRESS_START; va < current->user_heap.heap_top; va += PGSIZE) {
+    for (uint64 va = USER_FREE_ADDRESS_START; va < current[hartid]->user_heap.heap_top; va += PGSIZE) {
         map_pa = lookup_pa(page_dir, va);
         if (map_pa == 0) continue;
         if (pa >= map_pa && pa < map_pa + PGSIZE) {

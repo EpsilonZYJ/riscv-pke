@@ -26,11 +26,13 @@ static inline semid_t alloc_semaphore_id() {
 }
 
 void init_semaphore_pool() {
+    spin_lock(&g_semaphore_pool_lock);
     for (int i = 0; i < NSEMAPHORE; i++) {
         semaphores[i].sem_id = -1;
         semaphores[i].value = -1;
         semaphores[i].status = SEM_FREE;
     }
+    spin_unlock(&g_semaphore_pool_lock);
 }
 
 semaphore *alloc_semaphore() {

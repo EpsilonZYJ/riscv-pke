@@ -5,6 +5,7 @@
 #include "util/string.h"
 #include "memlayout.h"
 #include "spike_interface/spike_utils.h"
+#include "lock.h"
 
 static int page_ref_count[MAX_PAGES];
 
@@ -24,14 +25,22 @@ typedef struct node {
 // g_free_mem_list is the head of the list of free physical memory pages
 static list_node g_free_mem_list;
 
+static volatile int g_free_mem_lock = 0;
+static volatile int g_page_ref_lock = 0;
+
 //
 // actually creates the freepage list. each page occupies 4KB (PGSIZE), i.e., small page.
 // PGSIZE is defined in kernel/riscv.h, ROUNDUP is defined in util/functions.h.
 //
 static void create_freepage_list(uint64 start, uint64 end) {
+    spin_lock(&g_free_mem_lock);
     g_free_mem_list.next = 0;
+    spin_unlock(&g_free_mem_lock);
+
+    spin_lock(&g_page_ref_lock);
     for (uint64 p = ROUNDUP(start, PGSIZE); p + PGSIZE < end; p += PGSIZE)
         page_ref_count[get_page_ref((void *)p)] = 0, free_page((void *)p);
+    spin_unlock(&g_page_ref_lock);
 }
 
 static inline int get_page_index(void *pa) {
@@ -41,23 +50,30 @@ static inline int get_page_index(void *pa) {
 void inc_page_ref(void *pa) {
     int idx = get_page_index(pa);
     if (idx >= 0 && idx < MAX_PAGES) {
+        spin_lock(&g_page_ref_lock);
         page_ref_count[idx]++;
+        spin_unlock(&g_page_ref_lock);
     }
 }
 
 void dec_page_ref(void *pa) {
     int idx = get_page_index(pa);
     if (idx >= 0 && idx < MAX_PAGES) {
+        spin_lock(&g_page_ref_lock);
         if (page_ref_count[idx] > 0) {
             page_ref_count[idx]--;
         }
+        spin_unlock(&g_page_ref_lock);
     }
 }
 
 int get_page_ref(void *pa) {
     int idx = get_page_index(pa);
     if (idx >= 0 && idx < MAX_PAGES) {
-        return page_ref_count[idx];
+        spin_lock(&g_page_ref_lock);
+        int ret = page_ref_count[idx];
+        spin_unlock(&g_page_ref_lock);
+        return ret;
     }
     return 0;
 }
@@ -71,17 +87,22 @@ void free_page(void *pa) {
 
     int idx = get_page_index(pa);
     if (idx < MAX_PAGES && idx >= 0) {
+        spin_lock(&g_page_ref_lock);
         if (page_ref_count[idx] > 1) {
             page_ref_count[idx]--;
+            spin_unlock(&g_page_ref_lock);
             return;
         } else {
             page_ref_count[idx] = 0;
+            spin_unlock(&g_page_ref_lock);
         }
     }
     // insert a physical page to g_free_mem_list
     list_node *n = (list_node *)pa;
+    spin_lock(&g_free_mem_lock);
     n->next = g_free_mem_list.next;
     g_free_mem_list.next = n;
+    spin_unlock(&g_free_mem_lock);
 }
 
 //
@@ -89,11 +110,15 @@ void free_page(void *pa) {
 // Allocates only ONE page!
 //
 void *alloc_page(void) {
+    spin_lock(&g_free_mem_lock);
     list_node *n = g_free_mem_list.next;
     if (n) {
         g_free_mem_list.next = n->next;
+        spin_lock(&g_page_ref_lock);
         page_ref_count[get_page_index((void *)n)] = 1;
+        spin_unlock(&g_page_ref_lock);
     }
+    spin_unlock(&g_free_mem_lock);
     return (void *)n;
 }
 

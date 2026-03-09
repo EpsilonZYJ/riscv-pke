@@ -8,26 +8,28 @@
 #include "pmm.h"
 #include "string.h"
 
-process *ready_queue_head = NULL;
+process *ready_queue_head[NCPU];
 // process *block_queue_head = NULL;
 
 //
 // insert a process, proc, into the END of ready queue.
 //
 void insert_to_ready_queue(process *proc) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
     sprint("going to insert process %d to ready queue.\n", proc->pid);
     // if the queue is empty in the beginning
-    if (ready_queue_head == NULL) {
+    if (ready_queue_head[hartid] == NULL) {
         proc->status = READY;
         proc->queue_next = NULL;
-        ready_queue_head = proc;
+        ready_queue_head[hartid] = proc;
         return;
     }
 
     // ready queue is not empty
     process *p;
     // browse the ready queue to see if proc is already in-queue
-    for (p = ready_queue_head; p->queue_next != NULL; p = p->queue_next)
+    for (p = ready_queue_head[hartid]; p->queue_next != NULL; p = p->queue_next)
         if (p == proc) return; // already in queue
 
     // p points to the last element of the ready queue
@@ -120,7 +122,9 @@ process *pick_and_remove_from_block_queue(process **pblock_queue_head) {
 //
 extern process procs[NPROC];
 void schedule() {
-    if (!ready_queue_head) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    if (!ready_queue_head[hartid]) {
         // by default, if there are no ready process, and all processes are in the status of
         // FREE and ZOMBIE, we should shutdown the emulated RISC-V machine.
         int should_shutdown = 1;
@@ -140,13 +144,13 @@ void schedule() {
         }
     }
 
-    current = ready_queue_head;
-    assert(current->status == READY);
-    ready_queue_head = ready_queue_head->queue_next;
+    current[hartid] = ready_queue_head[hartid];
+    assert(current[hartid]->status == READY);
+    ready_queue_head[hartid] = ready_queue_head[hartid]->queue_next;
 
-    current->status = RUNNING;
-    sprint("going to schedule process %d to run.\n", current->pid);
-    switch_to(current);
+    current[hartid]->status = RUNNING;
+    sprint("hartid = %d: going to schedule process %d to run.\n", hartid, current[hartid]->pid);
+    switch_to(current[hartid]);
 }
 
 //
@@ -250,9 +254,11 @@ int do_fork(process *parent) {
 }
 
 int do_wait(int64 pid) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
     int has_child = 0;
     if (pid > 0) {
-        if (pid >= NPROC || procs[pid].parent != current) {
+        if (pid >= NPROC || procs[pid].parent != current[hartid]) {
             // pid大于0但不是当前子进程或不合法
             return -1;
         } else {
@@ -261,7 +267,7 @@ int do_wait(int64 pid) {
     } else if (pid == -1) {
         // pid为-1时
         for (int i = 0; i < NPROC; i++) {
-            if (procs[i].parent == current && procs[i].status != FREE) {
+            if (procs[i].parent == current[hartid] && procs[i].status != FREE) {
                 has_child = 1;
                 if (procs[i].status == ZOMBIE) {
                     // 已结束
@@ -277,8 +283,8 @@ int do_wait(int64 pid) {
         return -1; // 没有子进程
     }
 
-    current->status = BLOCKED;
-    insert_to_block_queue(&block_queue_head, current);
+    current[hartid]->status = BLOCKED;
+    insert_to_block_queue(&block_queue_head[hartid], current[hartid]);
 
     schedule();
     return -1; // 不会执行到这里

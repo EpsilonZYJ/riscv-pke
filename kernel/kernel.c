@@ -23,10 +23,6 @@
 //
 extern char trap_sec_start[];
 
-// FIXME: deal with user app
-// // process is a structure defined in kernel/process.h
-// process user_app[NCPU];
-
 //
 // turn on paging. added @lab2_1
 //
