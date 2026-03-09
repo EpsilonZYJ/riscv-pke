@@ -12,3 +12,4 @@ obj/
 pke_out.txt
 .idea/
 hostfs_root/bin/
+.DS_Store

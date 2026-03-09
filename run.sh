@@ -4,4 +4,4 @@ make clean
 make
 rm -rf output.txt
 echo "============================Compile Complete==============================="
-spike obj/riscv-pke /bin/app_print_backtrace
+spike obj/riscv-pke /bin/app_errorline
