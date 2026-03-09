@@ -16,12 +16,15 @@
 #include "rfs.h"
 #include "ramdev.h"
 #include "semaphore.h"
+#include "sync_utils.h"
 
 //
 // trap_sec_start points to the beginning of S-mode trap segment (i.e., the entry point of
 // S-mode trap vector). added @lab2_1
 //
 extern char trap_sec_start[];
+
+static volatile int s_counter = 0;
 
 //
 // turn on paging. added @lab2_1
@@ -92,26 +95,29 @@ int s_start(void) {
     // but now, we are going to switch to the paging mode @lab2_1.
     // note, the code still works in Bare mode when calling pmm_init() and kern_vm_init().
     write_csr(satp, 0);
-    // FIXME: 修复池
 
-    // init phisical memory manager
-    pmm_init();
+    if (hartid == 0) {
+        // init phisical memory manager
+        pmm_init();
 
-    // build the kernel page table
-    kern_vm_init();
+        // build the kernel page table
+        kern_vm_init();
 
-    // now, switch to paging mode by turning on paging (SV39)
-    enable_paging();
-    // the code now formally works in paging mode, meaning the page table is now in use.
-    sprint("hartid = %d: kernel page table is on \n", hartid);
+        // now, switch to paging mode by turning on paging (SV39)
+        enable_paging();
+        // the code now formally works in paging mode, meaning the page table is now in use.
+        sprint("kernel page table is on \n", hartid);
 
-    // added @lab3_1
-    init_proc_pool();
+        // added @lab3_1
+        init_proc_pool();
 
-    // init file system, added @lab4_1
-    fs_init();
+        // init file system, added @lab4_1
+        fs_init();
 
-    init_semaphore_pool();
+        init_semaphore_pool();
+    }
+
+    sync_barrier(&s_counter, NCPU);
 
     sprint("hartid = %d: Switch to user mode...\n", hartid);
     // the application code (elf) is first loaded into memory, and then put into execution

@@ -118,8 +118,8 @@ USER_ERROR_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_ERROR_CP
 
 #--
 
-USER_MULTIMEM_TARGET0 	:= $(OBJ_DIR)/app0
-USER_MULTIMEM_TARGET1 	:= $(OBJ_DIR)/app1
+USER_MULTIMEM_TARGET0 	:= $(HOSTFS_ROOT)/bin/app0
+USER_MULTIMEM_TARGET1 	:= $(HOSTFS_ROOT)/bin/app1
 
 USER_SHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/app_shell
 

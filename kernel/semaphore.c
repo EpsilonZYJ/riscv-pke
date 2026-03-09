@@ -68,11 +68,14 @@ void free_semaphore(semaphore *sem) {
 }
 
 void semaphore_P(semaphore *sem) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
     spin_lock(&g_semaphore_lock);
     sem->value--;
     if (sem->value < 0) {
-        current->status = BLOCKED;
-        insert_to_block_queue(&sem->proc_queue_head, current);
+        current[hartid]->status = BLOCKED;
+        insert_to_block_queue(&sem->proc_queue_head, current[hartid]);
         spin_unlock(&g_semaphore_lock);
         schedule();
     } else {

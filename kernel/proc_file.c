@@ -65,11 +65,14 @@ void reclaim_proc_file_management(proc_file_management *pfiles) {
 // return: the pointer to the opened file structure.
 //
 struct file *get_opened_file(int fd) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
     struct file *pfile = NULL;
 
     // browse opened file list to locate the fd
     for (int i = 0; i < MAX_FILES; ++i) {
-        pfile = &(current->pfiles->opened_files[i]); // file entry
+        pfile = &(current[hartid]->pfiles->opened_files[i]); // file entry
         if (i == fd) break;
     }
     if (pfile == NULL) panic("do_read: invalid fd!\n");
@@ -81,23 +84,26 @@ struct file *get_opened_file(int fd) {
 // return: -1 on failure; non-zero file-descriptor on success.
 //
 int do_open(char *pathname, int flags) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
     struct file *opened_file = NULL;
     if ((opened_file = vfs_open(pathname, flags)) == NULL) return -1;
 
     int fd = 0;
-    if (current->pfiles->nfiles >= MAX_FILES) {
+    if (current[hartid]->pfiles->nfiles >= MAX_FILES) {
         panic("do_open: no file entry for current process!\n");
     }
     struct file *pfile;
     for (fd = 0; fd < MAX_FILES; ++fd) {
-        pfile = &(current->pfiles->opened_files[fd]);
+        pfile = &(current[hartid]->pfiles->opened_files[fd]);
         if (pfile->status == FD_NONE) break;
     }
 
     // initialize this file structure
     memcpy(pfile, opened_file, sizeof(struct file));
 
-    ++current->pfiles->nfiles;
+    ++current[hartid]->pfiles->nfiles;
     return fd;
 }
 
@@ -167,13 +173,16 @@ int do_close(int fd) {
 // return: the fd of the directory file
 //
 int do_opendir(char *pathname) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
     struct file *opened_file = NULL;
     if ((opened_file = vfs_opendir(pathname)) == NULL) return -1;
 
     int fd = 0;
     struct file *pfile;
     for (fd = 0; fd < MAX_FILES; ++fd) {
-        pfile = &(current->pfiles->opened_files[fd]);
+        pfile = &(current[hartid]->pfiles->opened_files[fd]);
         if (pfile->status == FD_NONE) break;
     }
     if (pfile->status != FD_NONE) // no free entry
@@ -182,7 +191,7 @@ int do_opendir(char *pathname) {
     // initialize this file structure
     memcpy(pfile, opened_file, sizeof(struct file));
 
-    ++current->pfiles->nfiles;
+    ++current[hartid]->pfiles->nfiles;
     return fd;
 }
 
@@ -227,7 +236,10 @@ int do_unlink(char *path) {
 // read current working directory
 //
 int do_rcwd(char *path) {
-    struct dentry *cwd = current->pfiles->cwd;
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    struct dentry *cwd = current[hartid]->pfiles->cwd;
     if (cwd == vfs_root_dentry) {
         strcpy(path, "/");
         return 0;
@@ -260,13 +272,16 @@ int do_rcwd(char *path) {
 // change current working directory
 //
 int do_ccwd(char *path) {
-    struct dentry *parent = current->pfiles->cwd;
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    struct dentry *parent = current[hartid]->pfiles->cwd;
     char miss_name[MAX_PATH_LEN];
     struct dentry *file_dentry = lookup_final_dentry(path, &parent, miss_name);
     if (file_dentry == NULL || file_dentry->dentry_inode->type != DIR_I) {
         sprint("do_ccwd: cannot find the directory!\n");
         return -1;
     }
-    current->pfiles->cwd = file_dentry;
+    current[hartid]->pfiles->cwd = file_dentry;
     return 0;
 }
