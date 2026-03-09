@@ -37,10 +37,8 @@ static void create_freepage_list(uint64 start, uint64 end) {
     g_free_mem_list.next = 0;
     spin_unlock(&g_free_mem_lock);
 
-    spin_lock(&g_page_ref_lock);
     for (uint64 p = ROUNDUP(start, PGSIZE); p + PGSIZE < end; p += PGSIZE)
         page_ref_count[get_page_ref((void *)p)] = 0, free_page((void *)p);
-    spin_unlock(&g_page_ref_lock);
 }
 
 static inline int get_page_index(void *pa) {

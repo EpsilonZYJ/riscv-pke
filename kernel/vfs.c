@@ -25,7 +25,6 @@ struct hash_table vinode_hash_table;
 static inline struct dentry *get_path_start_dentry(const char *path) {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
-    assert(current[hartid]);
     if (path[0] == '/') {
         // absolute path always starts from root
         return vfs_root_dentry;
