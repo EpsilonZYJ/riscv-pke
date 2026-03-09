@@ -126,6 +126,7 @@ void switch_to(process *);
 void init_proc_pool();
 // allocate an empty process, init its vm space. returns its pid
 process *alloc_process();
+void release_proc_slot_reservation(uint64 pid);
 // reclaim a process, destruct its vm space and free physical pages.
 int free_process(process *proc);
 

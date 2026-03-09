@@ -11,6 +11,7 @@
 #include "spike_interface/spike_utils.h"
 #include "util/functions.h"
 #include "process.h"
+#include "debug_config.h"
 
 /* --- utility functions for virtual address mapping --- */
 //
@@ -20,6 +21,10 @@
 int map_pages(pagetable_t page_dir, uint64 va, uint64 size, uint64 pa, int perm) {
     uint64 first, last;
     pte_t *pte;
+
+#ifdef MULTICORE_MEM_DEBUG
+    sprint("[DEBUG] map_pages: before mapping va (0x%lx) to pa (0x%lx)\n", va, pa);
+#endif
 
     for (first = ROUNDDOWN(va, PGSIZE), last = ROUNDDOWN(va + size - 1, PGSIZE);
          first <= last; first += PGSIZE, pa += PGSIZE) {

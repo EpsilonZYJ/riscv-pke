@@ -16,8 +16,10 @@
 #include "pmm.h"
 #include "memlayout.h"
 #include "sched.h"
+#include "lock.h"
 #include "spike_interface/spike_utils.h"
 #include "util/functions.h"
+#include "debug_config.h"
 
 // Two functions defined in kernel/usertrap.S
 extern char smode_trap_vector[];
@@ -34,6 +36,10 @@ process procs[NPROC];
 process *current[NCPU];
 
 process *block_queue_head[NCPU];
+
+// Protects process slot reservation in alloc_process() on multicore startup/fork.
+static volatile int g_proc_alloc_lock = 0;
+static int g_proc_reserved[NPROC];
 
 //
 // switch to a user-mode process
@@ -80,6 +86,7 @@ void switch_to(process *proc) {
 //
 void init_proc_pool() {
     memset(procs, 0, sizeof(process) * NPROC);
+    memset(g_proc_reserved, 0, sizeof(g_proc_reserved));
 
     for (int i = 0; i < NPROC; ++i) {
         procs[i].status = FREE;
@@ -95,13 +102,19 @@ process *alloc_process() {
     // locate the first usable process structure
     int i;
 
+    spin_lock(&g_proc_alloc_lock);
     for (i = 0; i < NPROC; i++)
-        if (procs[i].status == FREE) break;
+        if (procs[i].status == FREE && g_proc_reserved[i] == 0) break;
 
     if (i >= NPROC) {
+        spin_unlock(&g_proc_alloc_lock);
         panic("cannot find any free process structure.\n");
         return 0;
     }
+
+    // Reserve this slot immediately so other harts cannot pick the same process.
+    g_proc_reserved[i] = 1;
+    spin_unlock(&g_proc_alloc_lock);
 
     // init proc[i]'s vm space
     procs[i].trapframe = (trapframe *)alloc_page(); // trapframe, used to save context
@@ -118,6 +131,10 @@ process *alloc_process() {
     // allocates a page to record memory regions (segments)
     procs[i].mapped_info = (mapped_region *)alloc_page();
     memset(procs[i].mapped_info, 0, PGSIZE);
+
+#ifdef MULTICORE_MEM_DEBUG
+    sprint("[DEBUG] alloc_process: before mapping.\n");
+#endif
 
     // map user stack in userspace
     user_vm_map((pagetable_t)procs[i].pagetable, USER_STACK_TOP - PGSIZE, PGSIZE,
@@ -166,6 +183,13 @@ process *alloc_process() {
 
     // return after initialization.
     return &procs[i];
+}
+
+void release_proc_slot_reservation(uint64 pid) {
+    if (pid >= NPROC) return;
+    spin_lock(&g_proc_alloc_lock);
+    g_proc_reserved[pid] = 0;
+    spin_unlock(&g_proc_alloc_lock);
 }
 
 //

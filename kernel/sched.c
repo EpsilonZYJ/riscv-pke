@@ -18,6 +18,7 @@ void insert_to_ready_queue(process *proc) {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
     sprint("going to insert process %d to ready queue.\n", proc->pid);
+    release_proc_slot_reservation(proc->pid);
     // if the queue is empty in the beginning
     if (ready_queue_head[hartid] == NULL) {
         proc->status = READY;

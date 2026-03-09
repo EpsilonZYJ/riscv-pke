@@ -10,5 +10,6 @@
 // #define MEM_DEBUG
 // #define ELF_C_DEBUG
 // #define MTRAP_C_DEBUG
+#define MULTICORE_MEM_DEBUG
 
 #endif // RISCV_PKE_DEBUG_H
