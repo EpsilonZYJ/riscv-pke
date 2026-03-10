@@ -76,6 +76,8 @@ USER_MULTIMEM_CPP1 		:= user/app_alloc1.c user/user_lib.c
 
 USER_SHELL_CPPS 	:= user/app_shell.c user/user_lib.c
 
+USER_ZSHELL_CPPS 	:= user/zshell.c user/user_lib.c
+
 USER_EXEC_CPPS 		:= user/app_exec.c user/user_lib.c
 
 USER_RELA_CPPS		:= user/app_relativepath.c user/user_lib.c
@@ -104,6 +106,8 @@ USER_MULTIMEM_OBJ1	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_MULTIME
 
 USER_SHELL_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_SHELL_CPPS)))
 
+USER_ZSHELL_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_ZSHELL_CPPS)))
+
 USER_EXEC_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_EXEC_CPPS)))
 
 USER_RELA_OBJS  	:= $(addprefix $(OBJ_DIR)/, $(patsubst %.c,%.o,$(USER_RELA_CPPS)))
@@ -131,6 +135,8 @@ USER_MULTIMEM_TARGET0 	:= $(HOSTFS_ROOT)/bin/app_alloc0
 USER_MULTIMEM_TARGET1 	:= $(HOSTFS_ROOT)/bin/app_alloc1
 
 USER_SHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/app_shell
+
+USER_ZSHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/zshell
 
 USER_EXEC_TARGET 	:= $(HOSTFS_ROOT)/bin/app_exec
 
@@ -188,6 +194,7 @@ $(OBJ_DIR):
 	@-mkdir -p $(dir $(SPIKE_INF_OBJS))
 	@-mkdir -p $(dir $(KERNEL_OBJS))
 	@-mkdir -p $(dir $(USER_SHELL_OBJS))
+	@-mkdir -p $(dir $(USER_ZSHELL_OBJS))
 	@-mkdir -p $(dir $(USER_EXEC_OBJS))
 	@-mkdir -p $(dir $(USER_RELA_OBJS))
 	@-mkdir -p $(dir $(USER_COW_OBJS))
@@ -234,6 +241,13 @@ $(USER_SHELL_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_SHELL_OBJS)
 	@echo "linking" $@	...
 	-@mkdir -p $(HOSTFS_ROOT)/bin
 	@$(COMPILE) --entry=main $(USER_SHELL_OBJS) $(UTIL_LIB) -o $@
+	@echo "User app has been built into" \"$@\"
+	@cp $@ $(OBJ_DIR)
+
+$(USER_ZSHELL_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_ZSHELL_OBJS)
+	@echo "linking" $@	...
+	-@mkdir -p $(HOSTFS_ROOT)/bin
+	@$(COMPILE) --entry=main $(USER_ZSHELL_OBJS) $(UTIL_LIB) -o $@
 	@echo "User app has been built into" \"$@\"
 	@cp $@ $(OBJ_DIR)
 
@@ -355,10 +369,10 @@ $(USER_O_TARGET): $(OBJ_DIR) $(UTIL_LIB) $(USER_O_OBJS)
 
 .DEFAULT_GOAL := $(all)
 
-all: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_PRINT_TARGET) $(USER_ERROR_TARGET) $(USER_MULTIMEM_TARGET0) $(USER_MULTIMEM_TARGET1) $(USER_MULTI_TARGET0) $(USER_MULTI_TARGET1) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+all: $(KERNEL_TARGET) $(USER_ZSHELL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_PRINT_TARGET) $(USER_ERROR_TARGET) $(USER_MULTIMEM_TARGET0) $(USER_MULTIMEM_TARGET1) $(USER_MULTI_TARGET0) $(USER_MULTI_TARGET1) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 .PHONY:all
 
-run: $(KERNEL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_PRINT_TARGET) $(USER_ERROR_TARGET) $(USER_MULTIMEM_TARGET0) $(USER_MULTIMEM_TARGET1) $(USER_MULTI_TARGET0) $(USER_MULTI_TARGET1) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
+run: $(KERNEL_TARGET) $(USER_ZSHELL_TARGET) $(USER_SHELL_TARGET) $(USER_EXEC_TARGET) $(USER_RELA_TARGET) $(USER_COW_TARGET) $(USER_SEMA_TARGET) $(USER_WAIT_TARGET) $(USER_SUM_TARGET) $(USER_SING_TARGET) $(USER_PRINT_TARGET) $(USER_ERROR_TARGET) $(USER_MULTIMEM_TARGET0) $(USER_MULTIMEM_TARGET1) $(USER_MULTI_TARGET0) $(USER_MULTI_TARGET1) $(USER_E_TARGET) $(USER_M_TARGET) $(USER_T_TARGET) $(USER_C_TARGET) $(USER_O_TARGET)
 	@echo "********************HUST PKE********************"
 	@echo "********************APP SHELL*********************"
 	spike $(KERNEL_TARGET) /bin/app_shell

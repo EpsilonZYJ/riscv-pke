@@ -12,11 +12,13 @@
 // #define MTRAP_C_DEBUG
 // #define MULTICORE_MEM_DEBUG
 // #define INIT_DEBUG
+// #define IO_DEBUG
 
 // #define FILE_SYSTEM_OUTPUT
 // #define PROCESS_SYSTEM_OUTPUT
 // #define INIT_OUTPUT
 
-#define SYSTEM_INFO_OUTPUT
+// #define SYSTEM_INFO_OUTPUT
+// #define PRINT_TICKS
 
 #endif // RISCV_PKE_DEBUG_H

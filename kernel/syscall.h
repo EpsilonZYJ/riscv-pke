@@ -22,6 +22,7 @@
 
 #define SYS_user_allocate_mem (SYS_user_base + 9)
 #define SYS_user_free_mem (SYS_user_base + 10)
+#define SYS_user_scanf (SYS_user_base + 11)
 
 // added @lab4_1
 #define SYS_user_open (SYS_user_base + 17)

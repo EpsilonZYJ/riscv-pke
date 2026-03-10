@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <errno.h>
+#include <stdarg.h>
 
 #include "util/types.h"
 #include "syscall.h"
@@ -36,6 +37,19 @@ ssize_t sys_user_print(const char *buf, size_t n) {
     char *pa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)buf);
     sprint("%s", pa);
     return 0;
+}
+
+ssize_t sys_user_scanf(const char *buf) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)buf);
+    int res = sscanf("%s", pa);
+#ifdef IO_DEBUG
+    sprint("[DEBUG] sys_user_scanf: finish scan\n");
+#endif
+
+    return res;
 }
 
 //
@@ -634,6 +648,8 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
     switch (a0) {
     case SYS_user_print:
         return sys_user_print((const char *)a1, a2);
+    case SYS_user_scanf:
+        return sys_user_scanf((const char *)a1);
     case SYS_user_exit:
         return sys_user_exit(a1);
     // added @lab2_2

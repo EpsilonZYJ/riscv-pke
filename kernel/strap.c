@@ -13,6 +13,7 @@
 
 #include "spike_interface/spike_utils.h"
 #include "util/string.h"
+#include "debug_config.h"
 
 //
 // handling the syscalls. will call do_syscall() defined in kernel/syscall.c
@@ -39,7 +40,9 @@ static uint64 g_ticks = 0;
 // added @lab1_3
 //
 void handle_mtimer_trap() {
+#ifdef PRINT_TICKS
     sprint("Ticks %d\n", g_ticks);
+#endif
     // (lab1_3): increase g_ticks to record this "tick", and then clear the "SIP"
     // field in sip register.
     // hint: use write_csr to disable the SIP_SSIP bit in sip.

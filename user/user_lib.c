@@ -9,6 +9,9 @@
 #include "util/types.h"
 #include "util/snprintf.h"
 #include "kernel/syscall.h"
+#include "util/snscanf.h"
+
+#include <stdio.h>
 
 uint64 do_user_call(uint64 sysnum, uint64 a1, uint64 a2, uint64 a3, uint64 a4, uint64 a5, uint64 a6,
                     uint64 a7) {
@@ -41,6 +44,17 @@ int printu(const char *s, ...) {
 
     // make a syscall to implement the required functionality.
     return do_user_call(SYS_user_print, (uint64)buf, n, 0, 0, 0, 0, 0);
+}
+
+int scanfu(const char *s, ...) {
+    va_list vl;
+    va_start(vl, s);
+
+    char buf[256];
+    do_user_call(SYS_user_scanf, (uint64)buf, 0, 0, 0, 0, 0, 0);
+    int res = vsnscanf(buf, sizeof(buf), s, vl);
+    va_end(vl);
+    return res;
 }
 
 //

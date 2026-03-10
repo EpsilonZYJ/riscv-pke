@@ -8,6 +8,7 @@
 #include "kernel/proc_file.h"
 
 int printu(const char *s, ...);
+int scanfu(const char *s, ...);
 int exit(int code);
 void *naive_malloc();
 void naive_free(void *va);
@@ -36,8 +37,8 @@ int closedir_u(int fd);
 // added @ lab4_3
 int link_u(const char *fn1, const char *fn2);
 int unlink_u(const char *fn);
-void* better_malloc(int n);
-void better_free(void* va);
+void *better_malloc(int n);
+void better_free(void *va);
 int print_backtrace(int depth);
 
 int wait(int pid);
@@ -45,6 +46,6 @@ int exec(char *command, char *para);
 int read_cwd(char *path);
 int change_cwd(const char *path);
 
-void printpa(int* va);
+void printpa(int *va);
 
 #endif
