@@ -258,7 +258,9 @@ int hostfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset) {
     char buf[512];
     memset(buf, 0, sizeof(buf));
     // 使用lseek定位到当前偏移位置
+    sprint("=============\n");
     spike_file_lseek(f, *offset, SEEK_SET);
+    sprint("=============\n");
 
     // 读取目录项数据到缓冲区
     long ret = frontend_syscall(HTIFSYS_getdents, f->kfd, (uint64)buf, sizeof(buf), 0, 0, 0, 0);

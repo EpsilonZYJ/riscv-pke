@@ -100,7 +100,6 @@ void app_exec(char *path, char *para) {
 }
 
 void app_ls(const char *path) {
-    printu("ls \"%s\":\n", path);
     int dir_fd = opendir_u(path);
     if (dir_fd == -1) {
         printu("ls: %s: No such file or directory\n", path);
@@ -137,7 +136,6 @@ void app_mkdir(const char *path) {
 
 void parse_cmd(char *cmd) {
     char *token = get_token(cmd, " ");
-    printu("token: %s\n", token);
     while (token != NULL) {
         if (strcmp(token, "ls") == 0) {
             token = skip_current_token(token, " ");
