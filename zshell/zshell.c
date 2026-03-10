@@ -18,6 +18,51 @@ struct command_t {
     paras_t *paras;
 } command_t;
 
+char *get_token(char *input, char *delim) {
+    if (input == NULL) return NULL;
+    int i = 0;
+    while (input[i] != '\0' && strchr(delim, input[i]) != NULL) {
+        i++;
+    }
+    if (input[i] == '\0' && input[i + 1] == '\0') return NULL;
+    while (input[i] != '\0' && strchr(delim, input[i]) == NULL) {
+        i++;
+    }
+    input[i] = '\0';
+    return input;
+}
+
+char *skip_current_token(char *input, char *delim) {
+    if (input == NULL) return NULL;
+    int i = 0;
+    int ret_i = 0;
+    // 跳过当前token
+    while ((input[i] != '\0' && strchr(delim, input[i]) == NULL)) {
+        i++;
+    }
+    // 如果到达字符串结尾，返回NULL
+    if (input[i] == '\0' && input[i + 1] == '\0') {
+        return NULL;
+    } else {
+        i++; // 跳过当前token的结尾'\0'
+    }
+
+    // 跳过分隔符
+    while (input[i] != '\0' && strchr(delim, input[i]) != NULL) {
+        i++;
+    }
+    if (input[i] == '\0' && input[i + 1] == '\0') {
+        return NULL;
+    } else {
+        ret_i = i;
+    }
+    while (input[i] != '\0' && strchr(delim, input[i]) == NULL) {
+        i++;
+    }
+    input[i] = '\0';
+    return input + ret_i;
+}
+
 /*
  * a simple shell program, which supports the following commands:
  */
@@ -55,6 +100,7 @@ void app_exec(char *path, char *para) {
 }
 
 void app_ls(const char *path) {
+    printu("ls \"%s\":\n", path);
     int dir_fd = opendir_u(path);
     if (dir_fd == -1) {
         printu("ls: %s: No such file or directory\n", path);
@@ -90,19 +136,21 @@ void app_mkdir(const char *path) {
  */
 
 void parse_cmd(char *cmd) {
-    char *token = strtok(cmd, " ");
+    char *token = get_token(cmd, " ");
+    printu("token: %s\n", token);
     while (token != NULL) {
         if (strcmp(token, "ls") == 0) {
-            token = strtok(token, " ");
+            token = skip_current_token(token, " ");
             if (token == NULL) {
                 app_ls(current_dir);
             } else {
                 do {
                     app_ls(token);
-                    token = strtok(token, " ");
+                    token = strtok(NULL, " ");
                 } while (token != NULL);
             }
         }
+        token = strtok(NULL, " ");
     }
 }
 
@@ -114,6 +162,7 @@ int main() {
     while (!to_exit) {
         printu("~%s $ ", current_dir);
         getsu(cmd, 100);
+        cmd[strlen(cmd) + 1] = '\0'; // 作为标记
         parse_cmd(cmd);
     }
 

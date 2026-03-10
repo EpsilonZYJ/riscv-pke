@@ -20,6 +20,6 @@
 
 #define SYSTEM_INFO_OUTPUT
 // #define PRINT_TICKS
-#define PAGE_FAULT_OUTPUT
+// #define PAGE_FAULT_OUTPUT
 
 #endif // RISCV_PKE_DEBUG_H

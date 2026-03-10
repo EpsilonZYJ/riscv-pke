@@ -11,6 +11,14 @@
 // root directory
 #define H_ROOT_DIR "./hostfs_root"
 
+struct dirent {
+    uint64 d_ino;
+    int64 d_off;
+    uint16 d_reclen;
+    uint8 d_type;
+    char d_name[];
+};
+
 // hostfs utility functin declarations
 int register_hostfs();
 struct device *init_host_device(char *name);
@@ -27,7 +35,7 @@ ssize_t hostfs_write(struct vinode *f_inode, const char *w_buf, ssize_t len,
 struct vinode *hostfs_lookup(struct vinode *parent, struct dentry *sub_dentry);
 struct vinode *hostfs_create(struct vinode *parent, struct dentry *sub_dentry);
 int hostfs_lseek(struct vinode *f_inode, ssize_t new_offset, int whence,
-                  int *offset);
+                 int *offset);
 int hostfs_link(struct vinode *parent, struct dentry *sub_dentry, struct vinode *link_node);
 int hostfs_unlink(struct vinode *parent, struct dentry *sub_dentry, struct vinode *unlink_node);
 int hostfs_hook_open(struct vinode *f_inode, struct dentry *f_dentry);
