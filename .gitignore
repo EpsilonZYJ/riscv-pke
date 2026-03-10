@@ -13,3 +13,6 @@ pke_out.txt
 .idea/
 hostfs_root/bin/
 .DS_Store
+*.mp4
+*.ppt
+*.pptx
