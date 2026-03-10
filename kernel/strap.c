@@ -59,7 +59,9 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
 
+#ifdef PAGE_FAULT_OUTPUT
     sprint("hartid = %d: handle_page_fault: %lx\n", hartid, stval);
+#endif
     switch (mcause) {
     case CAUSE_STORE_PAGE_FAULT:
         // (lab2_3): implement the operations that solve the page fault to
@@ -94,7 +96,9 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
         }
         break;
     default:
+#ifdef PAGE_FAULT_OUTPUT
         sprint("unknown page fault.\n");
+#endif
         break;
     }
 }
