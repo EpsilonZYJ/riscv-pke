@@ -16,3 +16,6 @@ hostfs_root/bin/
 *.mp4
 *.ppt
 *.pptx
+docs/pke-doc/pictures/car_video.mp4
+docs/pke-doc/resources/*.pptx
+
