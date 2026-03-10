@@ -52,6 +52,18 @@ ssize_t sys_user_scanf(const char *buf) {
     return res;
 }
 
+ssize_t sys_user_gets(const char *buf, size_t size) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    char *pa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)buf);
+    int res = getstring(pa, size);
+#ifdef IO_DEBUG
+    sprint("[DEBUG] sys_user_getline: finish getstring\n");
+#endif
+    return res;
+}
+
 //
 // implement the SYS_user_exit syscall
 //
@@ -713,6 +725,8 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
         return sys_user_sem_V(a1);
     case SYS_user_print_backtrace:
         return sys_user_print_backtrace(a1);
+    case SYS_user_gets:
+        return sys_user_gets((char *)a1, a2);
     default:
         panic("Unknown syscall %ld \n", a0);
     }

@@ -48,7 +48,7 @@ static uintptr_t mcall_console_getchar() {
 
 int vscanfk(const char *s, va_list vl) {
     char buf[256];
-    spike_file_read(stderr, buf, sizeof(buf));
+    spike_file_read(stdin, buf, sizeof(buf));
     int res = vsnscanf(buf, sizeof(buf), s, vl);
     return res;
 }
@@ -76,8 +76,9 @@ int sscanf(const char *s, ...) {
 int getstring(char *buf, size_t n) {
     char c;
     size_t i = 0;
-    while (i < n - 1 && (c = mcall_console_getchar()) != '\n' && c != '\r' && c != 0) {
-        buf[i++] = c;
+    spike_file_read(stdin, buf, n - 1);
+    while (buf[i] != '\n' && buf[i] != '\r' && i < n - 1) {
+        i++;
     }
     buf[i] = '\0';
     return i;

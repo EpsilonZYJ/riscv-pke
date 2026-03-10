@@ -7,6 +7,8 @@
 #include "util/types.h"
 #include "kernel/proc_file.h"
 
+#define NULL ((void *)0)
+
 int printu(const char *s, ...);
 int scanfu(const char *s, ...);
 int exit(int code);
@@ -47,5 +49,7 @@ int read_cwd(char *path);
 int change_cwd(const char *path);
 
 void printpa(int *va);
+
+int getsu(const char *buf, int size);
 
 #endif

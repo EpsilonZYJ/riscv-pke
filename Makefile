@@ -76,7 +76,7 @@ USER_MULTIMEM_CPP1 		:= user/app_alloc1.c user/user_lib.c
 
 USER_SHELL_CPPS 	:= user/app_shell.c user/user_lib.c
 
-USER_ZSHELL_CPPS 	:= user/zshell.c user/user_lib.c
+USER_ZSHELL_CPPS 	:= zshell/*.c user/user_lib.c
 
 USER_EXEC_CPPS 		:= user/app_exec.c user/user_lib.c
 
@@ -136,7 +136,7 @@ USER_MULTIMEM_TARGET1 	:= $(HOSTFS_ROOT)/bin/app_alloc1
 
 USER_SHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/app_shell
 
-USER_ZSHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/zshell
+USER_ZSHELL_TARGET 	:= $(HOSTFS_ROOT)/bin/zsh
 
 USER_EXEC_TARGET 	:= $(HOSTFS_ROOT)/bin/app_exec
 

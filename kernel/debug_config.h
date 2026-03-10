@@ -14,11 +14,11 @@
 // #define INIT_DEBUG
 // #define IO_DEBUG
 
-// #define FILE_SYSTEM_OUTPUT
-// #define PROCESS_SYSTEM_OUTPUT
-// #define INIT_OUTPUT
+#define FILE_SYSTEM_OUTPUT
+#define PROCESS_SYSTEM_OUTPUT
+#define INIT_OUTPUT
 
-// #define SYSTEM_INFO_OUTPUT
-// #define PRINT_TICKS
+#define SYSTEM_INFO_OUTPUT
+#define PRINT_TICKS
 
 #endif // RISCV_PKE_DEBUG_H

@@ -57,6 +57,10 @@ int scanfu(const char *s, ...) {
     return res;
 }
 
+int getsu(const char *s, int size) {
+    return do_user_call(SYS_user_gets, (uint64)s, size, 0, 0, 0, 0, 0);
+}
+
 //
 // applications need to call exit to quit execution.
 //
