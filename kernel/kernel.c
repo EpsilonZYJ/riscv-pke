@@ -19,6 +19,8 @@
 #include "sync_utils.h"
 #include "debug_config.h"
 
+#include <stdlib.h>
+
 //
 // trap_sec_start points to the beginning of S-mode trap segment (i.e., the entry point of
 // S-mode trap vector). added @lab2_1
@@ -36,6 +38,15 @@ void enable_paging() {
 
     // refresh tlb to invalidate its content.
     flush_tlb();
+}
+
+static char *get_executable_name(const char *relativepath) {
+    int length = strlen(relativepath);
+    char *ret = (char *)relativepath + length - 1;
+    while (ret >= relativepath && *ret != '/') {
+        ret--;
+    }
+    return ret + 1;
 }
 
 typedef union {
@@ -86,7 +97,11 @@ process *load_user_program() {
     size_t argc = parse_args(&arg_bug_msg);
     if (!argc) panic("You need to specify the application program!\n");
 
-    load_bincode_from_host_elf(proc, arg_bug_msg.argv[hartid]);
+    if (strcmp(get_executable_name(arg_bug_msg.argv[hartid]), "riscv-pke") != 0)
+        load_bincode_from_host_elf(proc, arg_bug_msg.argv[hartid]);
+    else {
+        proc->status = ZOMBIE;
+    }
 
 #ifdef MULTICORE_MEM_DEBUG
     sprint("[DEBUG]load_user_program: Loaded user program %s with argc=%d\n", arg_bug_msg.argv[0], argc);
@@ -148,7 +163,13 @@ int s_start(void) {
 #endif
     // the application code (elf) is first loaded into memory, and then put into execution
     // added @lab3_1
-    insert_to_ready_queue(load_user_program());
+    process *user_proc = load_user_program();
+    if (user_proc->status == ZOMBIE) {
+        sprint("hartid = %d: User exit with code:%d.\n", hartid, 0);
+        free_process(user_proc);
+    } else {
+        insert_to_ready_queue(user_proc);
+    }
 #ifdef INIT_DEBUG
     sprint("[DEBUG] s_start: load user program and insert to ready queue successfully.\n");
 #endif

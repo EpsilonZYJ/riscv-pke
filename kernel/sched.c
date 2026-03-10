@@ -26,7 +26,8 @@ void insert_to_ready_queue(process *proc) {
     release_proc_slot_reservation(proc->pid);
     // if the queue is empty in the beginning
     if (ready_queue_head[hartid] == NULL) {
-        proc->status = READY;
+        if (proc->status != ZOMBIE)
+            proc->status = READY;
         proc->queue_next = NULL;
         ready_queue_head[hartid] = proc;
         return;
@@ -41,7 +42,8 @@ void insert_to_ready_queue(process *proc) {
     // p points to the last element of the ready queue
     if (p == proc) return;
     p->queue_next = proc;
-    proc->status = READY;
+    if (proc->status != ZOMBIE)
+        proc->status = READY;
     proc->queue_next = NULL;
 
     return;
@@ -135,10 +137,11 @@ void schedule() {
         // FREE and ZOMBIE, we should shutdown the emulated RISC-V machine.
         int should_shutdown = 1;
 
-        for (int i = 0; i < NPROC; i++)
-            if ((procs[i].status != FREE) && (procs[i].status != ZOMBIE)) {
+        for (int i = 0; i < NPROC; i++) {
+            if ((procs[i].status != FREE) && (procs[i].status != ZOMBIE) && (procs[i].trapframe->regs.tp == hartid)) {
                 should_shutdown = 0;
             }
+        }
 
         if (should_shutdown) {
             if (hartid == 0) {
@@ -158,11 +161,12 @@ void schedule() {
                 // in lab1, PKE considers only one app (one process).
                 // therefore, shutdown the system when the app calls exit()
                 should_shutdown = 1;
-                for (int i = 0; i < NPROC; i++)
+                for (int i = 0; i < NPROC; i++) {
                     if ((procs[i].status != FREE) && (procs[i].status != ZOMBIE)) {
                         should_shutdown = 0;
                         sprint("process %d is still in state:%d\n", i, procs[i].status);
                     }
+                }
                 if (!should_shutdown) {
                     panic("Not handled: we should let system wait for unfinished processes.\n");
                 }
@@ -299,7 +303,7 @@ int do_wait(int64 pid) {
     } else if (pid == -1) {
         // pid为-1时
         for (int i = 0; i < NPROC; i++) {
-            if (procs[i].parent == current[hartid] && procs[i].status != FREE) {
+            if (procs[i].parent == current[hartid] && procs[i].status != FREE && procs[i].trapframe->regs.tp == hartid) {
                 has_child = 1;
                 if (procs[i].status == ZOMBIE) {
                     // 已结束
