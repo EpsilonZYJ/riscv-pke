@@ -30,6 +30,8 @@ void app_pwd() {
 void app_cd(const char *path) {
     if (change_cwd(path) != 0)
         printu("cd: no such file or directory: %s\n", path);
+    else
+        read_cwd(current_dir);
 }
 
 void app_cat(const char *filename) {

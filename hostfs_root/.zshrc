@@ -1,0 +1,5 @@
+alias cat='/bin/app_cat'
+alias ls='/bin/app_ls'
+alias echo='/bin/app_echo'
+alias touch='/bin/app_touch'
+alias mkdir='/bin/app_mkdir'

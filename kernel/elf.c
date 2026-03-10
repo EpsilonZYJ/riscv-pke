@@ -31,8 +31,9 @@ typedef struct elf_info_t {
 //
 static void *elf_alloc_mb(elf_ctx *ctx, uint64 elf_pa, uint64 elf_va, uint64 size) {
     elf_info *msg = (elf_info *)ctx->info;
-    // we assume that size of proram segment is smaller than a page.
-    kassert(size < PGSIZE);
+    // This helper allocates one page and returns the offset pointer in that page.
+    // Callers should pass size <= PGSIZE.
+    kassert(size <= PGSIZE);
     void *pa = alloc_page();
     if (pa == 0) panic("uvmalloc mem alloc falied\n");
 
@@ -261,6 +262,7 @@ void make_addr_line(elf_ctx *ctx, char *debug_line, uint64 length) {
 elf_status elf_load(elf_ctx *ctx) {
     // elf_prog_header structure is defined in kernel/elf.h
     elf_prog_header ph_addr;
+    elf_info *msg = (elf_info *)ctx->info;
     int i, off;
 
     // traverse the elf program segment headers
@@ -272,12 +274,38 @@ elf_status elf_load(elf_ctx *ctx) {
         if (ph_addr.memsz < ph_addr.filesz) return EL_ERR;
         if (ph_addr.vaddr + ph_addr.memsz < ph_addr.vaddr) return EL_ERR;
 
-        // allocate memory block before elf loading
-        void *dest = elf_alloc_mb(ctx, ph_addr.vaddr, ph_addr.vaddr, ph_addr.memsz);
+        // map the whole segment page by page to support multi-page ELF segments.
+        uint64 seg_start = ROUNDDOWN(ph_addr.vaddr, PGSIZE);
+        uint64 seg_end = ROUNDUP(ph_addr.vaddr + ph_addr.memsz, PGSIZE);
+        int prot = 0;
+        if (ph_addr.flags & SEGMENT_READABLE) prot |= PROT_READ;
+        if (ph_addr.flags & SEGMENT_WRITABLE) prot |= PROT_WRITE;
+        if (ph_addr.flags & SEGMENT_EXECUTABLE) prot |= PROT_EXEC;
 
-        // actual loading
-        if (elf_fpread(ctx, dest, ph_addr.memsz, ph_addr.off) != ph_addr.memsz)
-            return EL_EIO;
+        for (uint64 va = seg_start; va < seg_end; va += PGSIZE) {
+            void *pa = alloc_page();
+            if (pa == 0) panic("uvmalloc mem alloc falied\n");
+            memset(pa, 0, PGSIZE);
+            user_vm_map((pagetable_t)msg->p->pagetable, va, PGSIZE, (uint64)pa,
+                        prot_to_type(prot, 1));
+        }
+
+        // load file-backed bytes; bss tail remains zero-initialized.
+        uint64 remaining = ph_addr.filesz;
+        uint64 cur_va = ph_addr.vaddr;
+        uint64 cur_off = ph_addr.off;
+        while (remaining > 0) {
+            void *dest = user_va_to_pa((pagetable_t)msg->p->pagetable, (void *)cur_va);
+            if (dest == 0) return EL_ERR;
+
+            uint64 page_left = PGSIZE - (cur_va % PGSIZE);
+            uint64 chunk = remaining < page_left ? remaining : page_left;
+            if (elf_fpread(ctx, dest, chunk, cur_off) != chunk) return EL_EIO;
+
+            remaining -= chunk;
+            cur_va += chunk;
+            cur_off += chunk;
+        }
 
         // record the vm region in proc->mapped_info. added @lab3_1
         int j;
@@ -285,7 +313,8 @@ elf_status elf_load(elf_ctx *ctx) {
             if ((process *)(((elf_info *)(ctx->info))->p)->mapped_info[j].va == 0x0) break;
 
         ((process *)(((elf_info *)(ctx->info))->p))->mapped_info[j].va = ph_addr.vaddr;
-        ((process *)(((elf_info *)(ctx->info))->p))->mapped_info[j].npages = 1;
+        ((process *)(((elf_info *)(ctx->info))->p))->mapped_info[j].npages =
+            (seg_end - seg_start) / PGSIZE;
 
         // SEGMENT_READABLE, SEGMENT_EXECUTABLE, SEGMENT_WRITABLE are defined in kernel/elf.h
         if (ph_addr.flags == (SEGMENT_READABLE | SEGMENT_EXECUTABLE)) {
