@@ -28,6 +28,8 @@ const struct vinode_ops hostfs_i_ops = {
     .viop_unlink = hostfs_unlink,
     .viop_readdir = hostfs_readdir,
     .viop_mkdir = hostfs_mkdir,
+    .viop_hook_opendir = hostfs_hook_opendir,
+    .viop_hook_closedir = hostfs_hook_closedir,
 };
 
 /**** hostfs utility functions ****/
@@ -253,45 +255,93 @@ int hostfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset) {
         return -1;
     }
 
-    // hostfs uses host-side directory metadata, and getdents is unavailable in
-    // this Spike runtime. We enumerate children from the VFS dentry cache.
-    struct dentry *target = NULL;
-    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
-        struct hash_node *node = dentry_hash_table.head[i].next;
-        while (node) {
-            struct dentry *d = (struct dentry *)node->value;
-            if (d && d->dentry_inode == dir_vinode) {
-                target = d;
-                break;
-            }
-            node = node->next;
+    // 获取宿主机的目录文件描述符
+    spike_file_t *f = (spike_file_t *)dir_vinode->i_fs_info;
+    if (f == NULL || (int64)f < 0) return -1;
+
+    // VFS 传递进来的 offset 是索引 (0, 1, 2...)
+    // 因为 getdents 是流式读取的，最简单且无状态的做法是：每次查询都将 FD 指针移到开头
+    spike_file_lseek(f, 0, 0); // 0 代表 SEEK_SET
+
+    char buf[1024]; // 用于存放 getdents 返回的二进制数据
+    int current_idx = 0;
+
+    while (1) {
+        // 调用底层读取真实目录项数据
+        int nread = spike_file_getdents(f, buf, sizeof(buf));
+        sprint("=======================\n");
+        if (nread <= 0) {
+            break; // 目录读完或出错
         }
-        if (target) break;
+
+        int bpos = 0;
+        // 遍历本次读到的 buffer
+        while (bpos < nread) {
+            // 解析出 dirent 结构（在 hostfs.h 中已定义，与 Linux getdents64 结构一致）
+            struct dirent *d = (struct dirent *)(buf + bpos);
+
+            // 找到了 VFS 需要获取的第 *offset 个文件
+            if (current_idx == *offset) {
+                // 将宿主机文件的信息填入 PKE VFS 的 dir 结构中
+                strcpy(dir->name, d->d_name);
+                dir->inum = d->d_ino;
+                (*offset)++; // 更新偏移量给下一次调用
+                return 0;    // 成功读取一项
+            }
+
+            current_idx++;
+            bpos += d->d_reclen; // 根据 d_reclen 步进到下一个目录项
+        }
     }
 
-    if (target == NULL) {
-        return -1;
-    }
-
-    int idx = 0;
-    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
-        struct hash_node *node = dentry_hash_table.head[i].next;
-        while (node) {
-            struct dentry *d = (struct dentry *)node->value;
-            if (d && d->parent == target) {
-                if (idx == *offset) {
-                    safestrcpy(dir->name, d->name, MAX_FILE_NAME_LEN);
-                    dir->inum = d->dentry_inode ? d->dentry_inode->inum : -1;
-                    (*offset)++;
-                    return 0;
-                }
-                idx++;
-            }
-            node = node->next;
-        }
-    }
+    // 已经超过了目录项的最大个数
     return -1;
 }
+
+// int hostfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset) {
+//     if (dir_vinode == NULL || dir == NULL || offset == NULL) {
+//         return -1;
+//     }
+//
+//     // hostfs uses host-side directory metadata, and getdents is unavailable in
+//     // this Spike runtime. We enumerate children from the VFS dentry cache.
+//     struct dentry *target = NULL;
+//     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+//         struct hash_node *node = dentry_hash_table.head[i].next;
+//         while (node) {
+//             struct dentry *d = (struct dentry *)node->value;
+//             if (d && d->dentry_inode == dir_vinode) {
+//                 target = d;
+//                 break;
+//             }
+//             node = node->next;
+//         }
+//         if (target) break;
+//     }
+//
+//     if (target == NULL) {
+//         return -1;
+//     }
+//
+//     int idx = 0;
+//     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+//         struct hash_node *node = dentry_hash_table.head[i].next;
+//         while (node) {
+//             struct dentry *d = (struct dentry *)node->value;
+//             if (d && d->parent == target) {
+//                 if (idx == *offset) {
+//                     safestrcpy(dir->name, d->name, MAX_FILE_NAME_LEN);
+//                     dir->inum = d->dentry_inode ? d->dentry_inode->inum : -1;
+//                     (*offset)++;
+//                     return 0;
+//                 }
+//                 idx++;
+//             }
+//             node = node->next;
+//         }
+//     }
+//     return -1;
+// }
 
 struct vinode *hostfs_mkdir(struct vinode *parent, struct dentry *sub_dentry) {
     panic("hostfs_mkdir not implemented!\n");
@@ -339,4 +389,32 @@ struct super_block *hostfs_get_superblock(struct device *dev) {
     sb->s_root = root_dentry;
 
     return sb;
+}
+
+// 打开目录时，在宿主机真正打开目录获取 FD
+int hostfs_hook_opendir(struct vinode *dir_vinode, struct dentry *dentry) {
+    if (dir_vinode->i_fs_info != NULL) return 0;
+
+    char path[MAX_PATH_LEN];
+    get_path_string(path, dentry);
+
+    // 在宿主机以只读方式打开目录
+    spike_file_t *f = spike_file_open(path, O_RDONLY, 0);
+    if ((int64)f < 0) {
+        sprint("hostfs_hook_opendir cannot open the given directory.\n");
+        return -1;
+    }
+
+    dir_vinode->i_fs_info = f;
+    return 0;
+}
+
+// 关闭目录时，释放 FD
+int hostfs_hook_closedir(struct vinode *dir_vinode, struct dentry *dentry) {
+    spike_file_t *f = (spike_file_t *)dir_vinode->i_fs_info;
+    if (f != NULL && (int64)f > 0) {
+        spike_file_close(f);
+        dir_vinode->i_fs_info = NULL;
+    }
+    return 0;
 }

@@ -43,6 +43,8 @@ int hostfs_hook_close(struct vinode *f_inode, struct dentry *dentry);
 int hostfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset);
 struct vinode *hostfs_mkdir(struct vinode *parent, struct dentry *sub_dentry);
 struct super_block *hostfs_get_superblock(struct device *dev);
+int hostfs_hook_opendir(struct vinode *dir_vinode, struct dentry *dentry);
+int hostfs_hook_closedir(struct vinode *dir_vinode, struct dentry *dentry);
 
 extern const struct vinode_ops hostfs_node_ops;
 
