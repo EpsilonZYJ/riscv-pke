@@ -133,6 +133,7 @@ struct file *vfs_open(const char *path, int flags) {
     struct dentry *parent = get_path_start_dentry(path); // support relative path
     char miss_name[MAX_PATH_LEN];
 
+    sprint("[DEBUG] vfs_open: path: %s, flags: %d\n", path, flags);
     // path lookup.
     struct dentry *file_dentry = lookup_final_dentry(path, &parent, miss_name);
 
@@ -532,6 +533,7 @@ struct dentry *lookup_final_dentry(const char *path, struct dentry **parent,
     struct dentry *start_dentry;
     if (path[0] == '/') {
         // absolute path, start from root
+        sprint("[DEBUG] lookup_final_dentry: absolute path, start from root\n");
         start_dentry = vfs_root_dentry;
         *parent = vfs_root_dentry;
     } else {

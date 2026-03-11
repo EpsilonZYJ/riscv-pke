@@ -8,6 +8,8 @@
 #include "util/string.h"
 #include "user/user_lib.h"
 
+#define MAX_CMD_LEN 100
+
 char *current_dir = NULL;
 
 int exec_supported_command_t(command_t *cur_command) {
@@ -114,20 +116,37 @@ int exec_command(command_t *command) {
     return 0;
 }
 
-int main() {
+void init_shell() {
     current_dir = naive_malloc();
     read_cwd(current_dir);
+}
+
+int main() {
+    init_shell();
     int to_exit = 0;
     // Keep one extra byte so parser helpers can safely look past the first '\0'.
-    char cmd[101];
+    char cmd[MAX_CMD_LEN + 5];
     command_t *command = NULL;
+
+    // 写入命令历史
+    int fd = open("/zsh_history.txt", O_RDWR | O_CREAT);
+    if (fd < 0) {
+        printu("Error: failed to open history file\n");
+        exit(-1);
+    }
+    lseek_u(fd, 0, SEEK_END);
+
     while (!to_exit) {
         printu("~%s $ ", current_dir);
-        // getstring() only writes until line end; clear tail to avoid stale tokens.
         memset(cmd, 0, sizeof(cmd));
-        getsu(cmd, 100);
-        // cmd[strlen(cmd) + 1] = '\0'; // 作为标记
-        // parse_cmd(cmd);
+        getsu(cmd, MAX_CMD_LEN);
+
+        cmd[strlen(cmd) + 1] = '\0';
+        cmd[strlen(cmd)] = '\n';
+        // 将命令写入历史文件
+        write_u(fd, cmd, strlen(cmd));
+        cmd[strlen(cmd) - 1] = '\0';
+
         command = build_command(cmd, command);
         if (command == NULL) {
             printu("Error: failed to build command\n");
@@ -136,8 +155,9 @@ int main() {
         }
         clear_command(command);
     }
-    free_command(command);
 
+    close(fd);
+    free_command(command);
     naive_free(current_dir);
     exit(0);
     return 0;
