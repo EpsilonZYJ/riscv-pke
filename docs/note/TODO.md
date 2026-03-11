@@ -1,2 +1,8 @@
 - [x] support multipage allocation
-- [ ] support hostfs system
+- [x] support hostfs system
+- [ ] support multiple tasks
+    - [X] single core
+    - [ ] multi core
+- [ ] support pipline
+- [x] support command history
+- [x] support environment variables
