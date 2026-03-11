@@ -305,7 +305,7 @@ int do_wait(int64 pid) {
             has_child = 1;
         }
     } else if (pid == -1) {
-        // pid为-1时
+        // pid为-1时，等待任意子进程结束
         for (int i = 0; i < NPROC; i++) {
             if (procs[i].parent == current[hartid] && procs[i].status != FREE && procs[i].trapframe->regs.tp == hartid) {
                 has_child = 1;

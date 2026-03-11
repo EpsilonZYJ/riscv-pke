@@ -8,7 +8,7 @@
 #include "command.h"
 #include "zshrc_parser.h"
 
-int launch_process(char *path, char *para, int wait_child) {
+int launch_process(char *path, char *para, int wait_child, int *wait_count) {
     int pid = fork();
     if (pid < 0) {
         printu("fork failed!\n");
@@ -22,21 +22,23 @@ int launch_process(char *path, char *para, int wait_child) {
         }
         exit(0);
     }
-    if (wait_child) {
+    if (wait_child == 1) {
         wait(pid);
+    } else if (wait_child == -2) {
+        wait_count++;
     }
     return 0;
 }
 
-int run_one_command(command_t *cur_command, int wait_child) {
+int run_one_command(command_t *cur_command, int wait_child, int *wait_count) {
     if (strcmp(cur_command->operation, "exec") == 0) {
         if (cur_command->para_num == 2) {
             char *path = cur_command->paras->para;
             char *para = cur_command->paras->next->para;
-            return launch_process(path, para, wait_child);
+            return launch_process(path, para, wait_child, wait_count);
         } else if (cur_command->para_num == 1) {
             char *path = cur_command->paras->para;
-            return launch_process(path, "", wait_child);
+            return launch_process(path, "", wait_child, wait_count);
         } else {
             printu("exec: invalid input!\n");
             return -1;
@@ -47,7 +49,7 @@ int run_one_command(command_t *cur_command, int wait_child) {
     if (startwith(cur_command->operation, "./") || startwith(cur_command->operation, "/")) {
         return launch_process(cur_command->operation,
                               cur_command->paras == NULL ? "" : cur_command->paras->para,
-                              wait_child);
+                              wait_child, wait_count);
     }
 
     int ret = exec_supported_command_t(cur_command);
@@ -59,7 +61,7 @@ int run_one_command(command_t *cur_command, int wait_child) {
     if (alias_val != NULL) {
         return launch_process((char *)alias_val,
                               cur_command->paras == NULL ? "" : cur_command->paras->para,
-                              wait_child);
+                              wait_child, wait_count);
     } else {
         printu("Error: unknown command: %s\n", cur_command->operation);
         return -1;
@@ -159,23 +161,25 @@ int exec_supported_command_t(command_t *cur_command) {
 int exec_command(command_t *command) {
     if (command == NULL) return 0;
     command_t *cur_command = command;
+    int wait_count = 0;
     while (cur_command != NULL && cur_command->op_type != OP_DEAD) {
         if (strcmp(cur_command->operation, "exit") == 0) {
             return 1;
         }
         if (cur_command->op_type == OP_EXEC) {
-            run_one_command(cur_command, 1);
+            run_one_command(cur_command, 1, &wait_count);
             break; // OP_EXEC只会出现一个命令
         } else if (cur_command->op_type == OP_MULTISTART) {
-            int ret = run_one_command(cur_command, 0);
+            int ret = run_one_command(cur_command, -2, &wait_count);
             if (ret == -1) {
                 printu("Error: failed to execute command: %s\n", cur_command->operation);
                 return 0;
             }
+            wait_count++;
         } else if (cur_command->op_type == OP_PIPLINE) {
             while (cur_command->op_type == OP_PIPLINE) {
                 pipline_write();
-                int ret = run_one_command(cur_command, 1);
+                int ret = run_one_command(cur_command, 1, &wait_count);
                 if (ret != 0) {
                     pipline_reset();
                     printu("Error: failed to execute command: %s\n", cur_command->operation);
@@ -184,7 +188,7 @@ int exec_command(command_t *command) {
                 pipline_read();
                 cur_command = cur_command->next;
             }
-            int ret = run_one_command(cur_command, 1);
+            int ret = run_one_command(cur_command, 1, &wait_count);
             pipline_reset();
             if (ret != 0) {
                 printu("Error: failed to execute command: %s\n", cur_command->operation);
@@ -192,6 +196,11 @@ int exec_command(command_t *command) {
             }
         }
         cur_command = cur_command->next;
+    }
+    wait_count++;
+    while (wait_count > 0) {
+        wait(-1);
+        wait_count--;
     }
     return 0;
 }

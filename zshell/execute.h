@@ -8,8 +8,8 @@
 #include "global.h"
 #include "parser.h"
 
-int launch_process(char *path, char *para, int wait_child);
-int run_one_command(command_t *cur_command, int wait_child);
+int launch_process(char *path, char *para, int wait_child, int *wait_count);
+int run_one_command(command_t *cur_command, int wait_child, int *wait_count);
 int exec_supported_command_t(command_t *cur_command);
 int exec_command(command_t *command);
 
