@@ -25,8 +25,15 @@ void app_cat(const char *filename) {
     int MAXBUF = 512;
     char buf[MAXBUF];
     int fd = open(filename, O_RDWR);
-    read_u(fd, buf, MAXBUF);
-    printu("%s\n", buf);
+    int bytes_read = 0;
+    if (fd < 0) {
+        printu("cat: %s: No such file or directory\n", filename);
+        return;
+    }
+    while ((bytes_read = read_u(fd, buf, sizeof(buf) - 1)) > 0) {
+        buf[bytes_read] = '\0'; // null-terminate the buffer
+        printu("%s", buf);
+    }
     close(fd);
 }
 
