@@ -7,6 +7,7 @@
 #include "parser.h"
 #include "util/string.h"
 #include "user/user_lib.h"
+#include "zshrc_parser.h"
 
 #define MAX_CMD_LEN 100
 
@@ -105,7 +106,14 @@ int exec_command(command_t *command) {
             } else {
                 int ret = exec_supported_command_t(cur_command);
                 if (ret) {
-                    printu("Error: unknown command: %s\n", cur_command->operation);
+                    /* fall back to alias table before giving up */
+                    const char *alias_val = find_alias(cur_command->operation);
+                    if (alias_val != NULL) {
+                        app_exec((char *)alias_val,
+                                 cur_command->paras == NULL ? "" : cur_command->paras->para);
+                    } else {
+                        printu("Error: unknown command: %s\n", cur_command->operation);
+                    }
                 }
             }
             break; // OP_EXEC只会出现一个命令
@@ -119,6 +127,7 @@ int exec_command(command_t *command) {
 void init_shell() {
     current_dir = naive_malloc();
     read_cwd(current_dir);
+    load_zshrc();
 }
 
 int main() {
@@ -157,6 +166,7 @@ int main() {
     }
 
     close(fd_history);
+    free_aliases();
     free_command(command);
     naive_free(current_dir);
     exit(0);
