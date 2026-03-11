@@ -148,8 +148,8 @@ int exec_command(command_t *command) {
             int ret = run_one_command(cur_command, 0);
             if (ret == -1) {
                 printu("Error: failed to execute command: %s\n", cur_command->operation);
+                return 0;
             }
-            return -1;
         } else if (cur_command->op_type == OP_PIPLINE) {
             while (cur_command->op_type == OP_PIPLINE) {
                 pipline_write();
@@ -157,7 +157,7 @@ int exec_command(command_t *command) {
                 if (ret != 0) {
                     pipline_reset();
                     printu("Error: failed to execute command: %s\n", cur_command->operation);
-                    return -1;
+                    return 0;
                 }
                 pipline_read();
                 cur_command = cur_command->next;
@@ -166,7 +166,7 @@ int exec_command(command_t *command) {
             pipline_reset();
             if (ret != 0) {
                 printu("Error: failed to execute command: %s\n", cur_command->operation);
-                return -1;
+                return 0;
             }
         }
         cur_command = cur_command->next;
