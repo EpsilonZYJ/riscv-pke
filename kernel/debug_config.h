@@ -13,6 +13,7 @@
 // #define MULTICORE_MEM_DEBUG
 // #define INIT_DEBUG
 // #define IO_DEBUG
+// #define FS_DEBUG
 
 #define FILE_SYSTEM_OUTPUT
 #define PROCESS_SYSTEM_OUTPUT

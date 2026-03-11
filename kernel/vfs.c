@@ -10,6 +10,7 @@
 #include "util/string.h"
 #include "util/types.h"
 #include "util/hash_table.h"
+#include "debug_config.h"
 
 struct dentry *vfs_root_dentry;              // system root direntry
 struct super_block *vfs_sb_list[MAX_MOUNTS]; // system superblock list
@@ -133,7 +134,10 @@ struct file *vfs_open(const char *path, int flags) {
     struct dentry *parent = get_path_start_dentry(path); // support relative path
     char miss_name[MAX_PATH_LEN];
 
+#ifdef FS_DEBUG
     sprint("[DEBUG] vfs_open: path: %s, flags: %d\n", path, flags);
+#endif
+
     // path lookup.
     struct dentry *file_dentry = lookup_final_dentry(path, &parent, miss_name);
 
@@ -533,7 +537,9 @@ struct dentry *lookup_final_dentry(const char *path, struct dentry **parent,
     struct dentry *start_dentry;
     if (path[0] == '/') {
         // absolute path, start from root
+#ifdef FS_DEBUG
         sprint("[DEBUG] lookup_final_dentry: absolute path, start from root\n");
+#endif
         start_dentry = vfs_root_dentry;
         *parent = vfs_root_dentry;
     } else {

@@ -129,12 +129,12 @@ int main() {
     command_t *command = NULL;
 
     // 写入命令历史
-    int fd = open("/zsh_history.txt", O_RDWR | O_CREAT);
-    if (fd < 0) {
+    int fd_history = open("/.zsh_history", O_RDWR | O_CREAT);
+    if (fd_history < 0) {
         printu("Error: failed to open history file\n");
         exit(-1);
     }
-    lseek_u(fd, 0, SEEK_END);
+    lseek_u(fd_history, 0, SEEK_END);
 
     while (!to_exit) {
         printu("~%s $ ", current_dir);
@@ -144,7 +144,7 @@ int main() {
         cmd[strlen(cmd) + 1] = '\0';
         cmd[strlen(cmd)] = '\n';
         // 将命令写入历史文件
-        write_u(fd, cmd, strlen(cmd));
+        write_u(fd_history, cmd, strlen(cmd));
         cmd[strlen(cmd) - 1] = '\0';
 
         command = build_command(cmd, command);
@@ -156,7 +156,7 @@ int main() {
         clear_command(command);
     }
 
-    close(fd);
+    close(fd_history);
     free_command(command);
     naive_free(current_dir);
     exit(0);
