@@ -253,7 +253,9 @@ int do_fork(process *parent) {
                 uint64 addr = lookup_pa(parent->pagetable, parent->mapped_info[i].va + j * PGSIZE);
                 map_pages(child->pagetable, parent->mapped_info[i].va + j * PGSIZE, PGSIZE, addr,
                           prot_to_type(PROT_WRITE | PROT_READ | PROT_EXEC, 1));
+#ifdef DO_FORK_OUTPUT
                 sprint("do_fork map code segment at pa:%lx of parent to child at va:%lx.\n", addr, parent->mapped_info[i].va + j * PGSIZE);
+#endif
             }
 
             // after mapping, register the vm region (do not delete codes below!)

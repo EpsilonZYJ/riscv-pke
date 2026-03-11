@@ -13,6 +13,66 @@
 
 char *current_dir = NULL;
 
+int exec_supported_command_t(command_t *cur_command);
+
+static int launch_process(char *path, char *para, int wait_child) {
+    int pid = fork();
+    if (pid < 0) {
+        printu("fork failed!\n");
+        return -1;
+    }
+    if (pid == 0) {
+        int ret = exec(path, para);
+        if (ret == -1) {
+            printu("exec failed!\n");
+            exit(-1);
+        }
+        exit(0);
+    }
+    if (wait_child) {
+        wait(pid);
+    }
+    return 0;
+}
+
+static int run_one_command(command_t *cur_command, int wait_child) {
+    if (strcmp(cur_command->operation, "exec") == 0) {
+        if (cur_command->para_num == 2) {
+            char *path = cur_command->paras->para;
+            char *para = cur_command->paras->next->para;
+            launch_process(path, para, wait_child);
+        } else if (cur_command->para_num == 1) {
+            char *path = cur_command->paras->para;
+            launch_process(path, "", wait_child);
+        } else {
+            printu("exec: invalid input!\n");
+        }
+        return 0;
+    }
+
+    if (startwith(cur_command->operation, "./") || startwith(cur_command->operation, "/")) {
+        launch_process(cur_command->operation,
+                       cur_command->paras == NULL ? "" : cur_command->paras->para,
+                       wait_child);
+        return 0;
+    }
+
+    int ret = exec_supported_command_t(cur_command);
+    if (ret == 0) {
+        return 0;
+    }
+
+    const char *alias_val = find_alias(cur_command->operation);
+    if (alias_val != NULL) {
+        launch_process((char *)alias_val,
+                       cur_command->paras == NULL ? "" : cur_command->paras->para,
+                       wait_child);
+    } else {
+        printu("Error: unknown command: %s\n", cur_command->operation);
+    }
+    return 0;
+}
+
 int exec_supported_command_t(command_t *cur_command) {
     if (strcmp(cur_command->operation, "ls") == 0) {
         if (cur_command->para_num == 0) {
@@ -88,36 +148,10 @@ int exec_command(command_t *command) {
             return 1;
         }
         if (cur_command->op_type == OP_EXEC) {
-            if (strcmp(cur_command->operation, "exec") == 0) {
-                if (cur_command->para_num == 2) {
-                    char *path = cur_command->paras->para;
-                    char *para = cur_command->paras->next->para;
-                    app_exec(path, para);
-                } else if (cur_command->para_num == 1) {
-                    char *path = cur_command->paras->para;
-                    app_exec(path, "");
-                } else {
-                    printu("exec: invalid input!\n");
-                }
-            } else if (startwith(command->operation, "./")) {
-                app_exec(cur_command->operation, cur_command->paras == NULL ? "" : cur_command->paras->para);
-            } else if (startwith(command->operation, "/")) {
-                app_exec(cur_command->operation, cur_command->paras == NULL ? "" : cur_command->paras->para);
-            } else {
-                int ret = exec_supported_command_t(cur_command);
-                if (ret) {
-                    /* fall back to alias table before giving up */
-                    const char *alias_val = find_alias(cur_command->operation);
-                    if (alias_val != NULL) {
-                        app_exec((char *)alias_val,
-                                 cur_command->paras == NULL ? "" : cur_command->paras->para);
-                    } else {
-                        printu("Error: unknown command: %s\n", cur_command->operation);
-                    }
-                }
-            }
+            run_one_command(cur_command, 1);
             break; // OP_EXEC只会出现一个命令
         } else if (cur_command->op_type == OP_MULTISTART) {
+            run_one_command(cur_command, 0);
         }
         cur_command = cur_command->next;
     }
