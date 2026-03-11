@@ -3,6 +3,6 @@
 - [ ] support multiple tasks
     - [X] single core
     - [ ] multi core
-- [ ] support pipline
+- [x] support pipline
 - [x] support command history
 - [x] support environment variables
