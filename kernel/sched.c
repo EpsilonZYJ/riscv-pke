@@ -197,7 +197,9 @@ void schedule() {
 // for the child.
 //
 int do_fork(process *parent) {
+#ifdef DO_FORK_OUTPUT
     sprint("will fork a child from parent %d.\n", parent->pid);
+#endif
     process *child = alloc_process();
 
     for (int i = 0; i < parent->total_mapped_region; i++) {

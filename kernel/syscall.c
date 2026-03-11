@@ -396,7 +396,9 @@ ssize_t sys_user_fork() {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
     assert(current[hartid]);
+#ifdef DO_FORK_OUTPUT
     sprint("hartid = %d: User call fork.\n", hartid);
+#endif
     return do_fork(current[hartid]);
 }
 
