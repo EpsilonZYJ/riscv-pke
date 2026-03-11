@@ -86,19 +86,22 @@ int exec_command(command_t *command) {
         }
         if (cur_command->op_type == OP_EXEC) {
             if (strcmp(cur_command->operation, "exec") == 0) {
-                if (cur_command->para_num != 2) {
-                    printu("exec: invalid input!\n");
-                } else {
+                if (cur_command->para_num == 2) {
                     char *path = cur_command->paras->para;
                     char *para = cur_command->paras->next->para;
                     app_exec(path, para);
+                } else if (cur_command->para_num == 1) {
+                    char *path = cur_command->paras->para;
+                    app_exec(path, "");
+                } else {
+                    printu("exec: invalid input!\n");
                 }
             } else if (startwith(command->operation, "./")) {
                 app_exec(cur_command->operation, cur_command->paras == NULL ? "" : cur_command->paras->para);
             } else {
                 int ret = exec_supported_command_t(cur_command);
                 if (ret) {
-                    printu("Error: unsupported command: %s\n", cur_command->operation);
+                    printu("Error: unknown command: %s\n", cur_command->operation);
                 }
             }
             break; // OP_EXEC只会出现一个命令
