@@ -87,3 +87,9 @@ void app_ls(const char *path) {
 void app_mkdir(const char *path) {
     mkdir_u(path);
 }
+
+void app_touch(const char *path) {
+    int fd;
+    fd = open(path, O_CREAT);
+    close(fd);
+}

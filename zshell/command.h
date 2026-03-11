@@ -14,5 +14,6 @@ void app_echo(const char *filepath, char *content);
 void app_exec(char *path, char *para);
 void app_ls(const char *path);
 void app_mkdir(const char *path);
+void app_touch(const char *path);
 
 #endif // RISCV_PKE_COMMAND_H
