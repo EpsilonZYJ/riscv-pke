@@ -46,12 +46,44 @@ int printu(const char *s, ...) {
     return do_user_call(SYS_user_print, (uint64)buf, n, 0, 0, 0, 0, 0);
 }
 
+int fprintu(int fd, const char *s, ...) {
+    va_list vl;
+    va_start(vl, s);
+
+    char out[256]; // fixed buffer size.
+    int res = vsnprintf(out, sizeof(out), s, vl);
+    va_end(vl);
+    const char *buf = out;
+    size_t n = res < sizeof(out) ? res : sizeof(out);
+
+    if (fd == stdout_u) {
+        return do_user_call(SYS_user_print, (uint64)buf, n, 0, 0, 0, 0, 0);
+    }
+    // make a syscall to implement the required functionality.
+    return write_u(fd, (void *)buf, n);
+}
+
 int scanfu(const char *s, ...) {
     va_list vl;
     va_start(vl, s);
 
     char buf[256];
     do_user_call(SYS_user_scanf, (uint64)buf, 0, 0, 0, 0, 0, 0);
+    int res = vsnscanf(buf, sizeof(buf), s, vl);
+    va_end(vl);
+    return res;
+}
+
+int fscanf_u(int fd, const char *s, ...) {
+    va_list vl;
+    va_start(vl, s);
+
+    char buf[256];
+    if (fd == stdin_u) {
+        do_user_call(SYS_user_scanf, (uint64)buf, 0, 0, 0, 0, 0, 0);
+    } else {
+        read_u(fd, (void *)buf, sizeof(buf));
+    }
     int res = vsnscanf(buf, sizeof(buf), s, vl);
     va_end(vl);
     return res;

@@ -8,9 +8,13 @@
 #include "kernel/proc_file.h"
 
 #define NULL ((void *)0)
+#define stdin_u (-10)
+#define stdout_u (-11)
 
 int printu(const char *s, ...);
+int fprintu(int fd, const char *s, ...);
 int scanfu(const char *s, ...);
+int fscanf_u(int fd, const char *s, ...);
 int exit(int code);
 void *naive_malloc();
 void naive_free(void *va);

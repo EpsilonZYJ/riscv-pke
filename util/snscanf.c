@@ -43,7 +43,7 @@ int32 vsnscanf(char *in, size_t n, const char *s, va_list vl) {
             case 'd': {
                 if (pos < n) {
                     while (in[pos] == ' ' || in[pos] == '\t') pos++;
-                    long *d_buf = (longarg ? va_arg(vl, long *) : (long *)va_arg(vl, int *));
+                    // long *d_buf = (longarg ? va_arg(vl, long *) : (long *)va_arg(vl, int *));
                     long digits = 0;
                     long sign = 1;
                     if (in[pos] == '-') {
@@ -56,7 +56,13 @@ int32 vsnscanf(char *in, size_t n, const char *s, va_list vl) {
                         digits = digits * 10 + (in[pos] - '0');
                         pos++;
                     }
-                    *d_buf = sign * digits;
+                    if (longarg) {
+                        long *d_buf = va_arg(vl, long *);
+                        *d_buf = sign * digits;
+                    } else {
+                        int *d_buf = va_arg(vl, int *);
+                        *d_buf = sign * digits;
+                    }
                     cnt++;
                 }
                 format = FALSE;

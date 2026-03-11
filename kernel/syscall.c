@@ -44,6 +44,9 @@ ssize_t sys_user_scanf(const char *buf) {
     assert(hartid < NCPU);
     assert(current[hartid]);
     char *pa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)buf);
+#ifdef IO_DEBUG
+    sprint("[DEBUG] sys_user_scanf: start scan\n");
+#endif
     int res = sscanf("%s", pa);
 #ifdef IO_DEBUG
     sprint("[DEBUG] sys_user_scanf: finish scan\n");
