@@ -37,7 +37,14 @@ void app_echo(const char *filepath, char *content) {
 }
 
 void app_exec(char *path, char *para) {
-    int ret = exec(path, para);
+    int pid = fork();
+    if (pid == 0) {
+        int ret = exec(path, para);
+        if (ret == -1)
+            printu("exec failed!\n");
+    } else {
+        wait(pid);
+    }
 }
 
 void app_ls(const char *path) {
