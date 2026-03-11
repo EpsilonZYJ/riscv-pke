@@ -81,6 +81,10 @@ int getstring(char *buf, size_t n) {
         i++;
     }
     buf[i] = '\0';
+    // Add an extra sentinel so token helpers can safely detect end of this line.
+    if (i + 1 < n) {
+        buf[i + 1] = '\0';
+    }
     return i;
 }
 

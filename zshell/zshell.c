@@ -53,10 +53,13 @@ int main() {
     current_dir = naive_malloc();
     read_cwd(current_dir);
     int to_exit = 0;
-    char cmd[100];
+    // Keep one extra byte so parser helpers can safely look past the first '\0'.
+    char cmd[101];
     command_t *command = NULL;
     while (!to_exit) {
         printu("~%s $ ", current_dir);
+        // getstring() only writes until line end; clear tail to avoid stale tokens.
+        memset(cmd, 0, sizeof(cmd));
         getsu(cmd, 100);
         // cmd[strlen(cmd) + 1] = '\0'; // 作为标记
         // parse_cmd(cmd);

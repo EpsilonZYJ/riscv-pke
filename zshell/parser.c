@@ -9,47 +9,41 @@
 
 char *get_token(char *input, char *delim) {
     if (input == NULL) return NULL;
-    int i = 0;
-    while (input[i] != '\0' && strchr(delim, input[i]) != NULL) {
-        i++;
+
+    char *p = input;
+    while (*p != '\0' && strchr(delim, *p) != NULL) {
+        p++;
     }
-    if (input[i] == '\0' && input[i + 1] == '\0') return NULL;
-    while (input[i] != '\0' && strchr(delim, input[i]) == NULL) {
-        i++;
+    if (*p == '\0') return NULL;
+
+    char *start = p;
+    while (*p != '\0' && strchr(delim, *p) == NULL) {
+        p++;
     }
-    input[i] = '\0';
-    return input;
+    if (*p != '\0') {
+        *p = '\0';
+    }
+    return start;
 }
 
 char *skip_current_token(char *input, char *delim) {
     if (input == NULL) return NULL;
-    int i = 0;
-    int ret_i = 0;
-    // 跳过当前token
-    while ((input[i] != '\0' && strchr(delim, input[i]) == NULL)) {
-        i++;
-    }
-    // 如果到达字符串结尾，返回NULL
-    if (input[i] == '\0' && input[i + 1] == '\0') {
-        return NULL;
-    } else {
-        i++; // 跳过当前token的结尾'\0'
-    }
 
-    // 跳过分隔符
-    while (input[i] != '\0' && strchr(delim, input[i]) != NULL) {
-        i++;
+    // input points to current token; move to the byte right after its '\0'.
+    char *p = input + strlen(input) + 1;
+    while (*p != '\0' && strchr(delim, *p) != NULL) {
+        p++;
     }
-    if (input[i] == '\0' && input[i + 1] == '\0') {
-        return NULL;
-    } else {
-        ret_i = i;
+    if (*p == '\0') return NULL;
+
+    char *start = p;
+    while (*p != '\0' && strchr(delim, *p) == NULL) {
+        p++;
     }
-    while (input[i] != '\0' && strchr(delim, input[i]) == NULL) {
-        i++;
+    if (*p != '\0') {
+        *p = '\0';
     }
-    input[i] = '\0';
-    return input + ret_i;
+    return start;
 }
 
 void free_paras(command_t *command) {
@@ -66,15 +60,16 @@ void free_paras(command_t *command) {
 }
 
 command_t *build_command(char *cmdline, command_t *command) {
+    // Rebuild always starts from a clean logical state on the reusable list.
+    if (command != NULL) {
+        clear_command(command);
+    }
+
     char *token = get_token(cmdline, " ");
     // 如果没有token，说明命令行为空，返回NULL
     if (token == NULL) {
         if (command == NULL) {
             return NULL;
-        }
-        // 将原来的命令标记为死命令，从而在执行时直接跳过
-        for (command_t *i = command; i != NULL; i = i->next) {
-            i->op_type = OP_DEAD;
         }
         return command;
     }
@@ -83,10 +78,12 @@ command_t *build_command(char *cmdline, command_t *command) {
         if (command == NULL) {
             return NULL;
         }
+        command->operation = NULL;
         command->paras = NULL;
+        command->para_num = 0;
+        command->op_type = OP_DEAD;
         command->next = NULL;
     }
-    command->para_num = 0;
     command_t *cur_command = command;
     while (token != NULL) {
         cur_command->operation = token;
@@ -193,10 +190,10 @@ command_t *build_command(char *cmdline, command_t *command) {
 
 void free_command(command_t *command) {
     if (command == NULL) return;
-    free_paras(command);
     command_t *cur_command = command;
     while (cur_command != NULL) {
         command_t *next_command = cur_command->next;
+        free_paras(cur_command);
         better_free(cur_command);
         cur_command = next_command;
     }
@@ -209,7 +206,8 @@ void print_command(command_t *command) {
     }
     command_t *cur_command = command;
     while (cur_command != NULL) {
-        printu("operation: %s, para_num: %d, op_type: %d\n", cur_command->operation, cur_command->para_num, cur_command->op_type);
+        const char *op = cur_command->operation == NULL ? "" : cur_command->operation;
+        printu("operation: %s, para_num: %d, op_type: %d\n", op, cur_command->para_num, cur_command->op_type);
         paras_t *paras = cur_command->paras;
         while (paras != NULL) {
             printu("\tpara: %s\n", paras->para);
@@ -222,14 +220,14 @@ void print_command(command_t *command) {
 // 将命令标记为死命令，从而在执行时直接跳过
 void clear_command(command_t *command) {
     if (command == NULL) return;
-    free_paras(command);
-    printu("clear command\n");
     command_t *cur_command = command;
     while (cur_command != NULL) {
+        command_t *next_command = cur_command->next;
+        free_paras(cur_command);
         cur_command->operation = NULL;
-        cur_command->next = NULL;
         cur_command->para_num = 0;
         cur_command->op_type = OP_DEAD;
-        cur_command = cur_command->next;
+        // Keep the linked structure so build_command can reuse allocated nodes.
+        cur_command = next_command;
     }
 }
