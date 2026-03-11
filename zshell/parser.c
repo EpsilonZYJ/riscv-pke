@@ -169,21 +169,21 @@ command_t *build_command(char *cmdline, command_t *command) {
                 cur_command->op_type = OP_EXEC;
                 break;
             }
-            if (cur_command->next == NULL) {
-                // 如果当前命令的下一个命令不存在，说明复用结构体需要增加一个命令
-                cur_command->next = better_malloc(sizeof(command_t));
-                if (cur_command->next == NULL) {
-                    free_paras(command);
-                    return command;
-                }
-                cur_command->next->paras = NULL;
-                cur_command->next->next = NULL;
-                cur_command->next->operation = NULL;
-                cur_command->next->para_num = 0;
-                cur_command->next->op_type = OP_DEAD;
-            }
-            cur_command = cur_command->next;
         }
+        if (cur_command->next == NULL) {
+            // 如果当前命令的下一个命令不存在，说明复用结构体需要增加一个命令
+            cur_command->next = better_malloc(sizeof(command_t));
+            if (cur_command->next == NULL) {
+                free_paras(command);
+                return command;
+            }
+            cur_command->next->paras = NULL;
+            cur_command->next->next = NULL;
+            cur_command->next->operation = NULL;
+            cur_command->next->para_num = 0;
+            cur_command->next->op_type = OP_DEAD;
+        }
+        cur_command = cur_command->next;
     }
     return command;
 }

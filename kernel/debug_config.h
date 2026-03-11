@@ -17,9 +17,9 @@
 
 // #define FILE_SYSTEM_OUTPUT
 // #define PROCESS_SYSTEM_OUTPUT
-#define INIT_OUTPUT
+// #define INIT_OUTPUT
 // #define DO_FORK_OUTPUT
-#define SYSTEM_INFO_OUTPUT
+// #define SYSTEM_INFO_OUTPUT
 // #define PRINT_TICKS
 // #define PAGE_FAULT_OUTPUT
 
