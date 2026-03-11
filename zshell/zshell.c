@@ -123,6 +123,9 @@ void app_ls(const char *path) {
             printu("\n");
         }
     }
+    if (count % 5 != 4) {
+        printu("\n");
+    }
     closedir_u(dir_fd);
 }
 

@@ -6,6 +6,7 @@
 #include "pmm.h"
 #include "spike_interface/spike_file.h"
 #include "spike_interface/spike_utils.h"
+#include "util/hash_table.h"
 #include "util/string.h"
 #include "util/types.h"
 #include "vfs.h"
@@ -20,7 +21,6 @@ const struct vinode_ops hostfs_i_ops = {
 
     .viop_hook_open = hostfs_hook_open,
     .viop_hook_close = hostfs_hook_close,
-
     .viop_write_back_vinode = hostfs_write_back_vinode,
 
     // not implemented
@@ -249,39 +249,47 @@ int hostfs_unlink(struct vinode *parent, struct dentry *sub_dentry, struct vinod
 }
 
 int hostfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset) {
-    spike_file_t *f = (spike_file_t *)dir_vinode->i_fs_info;
-    if (f < 0) {
-        panic("hostfs_readdir: invalid file handle!\n");
-    }
-
-    // 分配缓冲区用于存储目录项数据
-    char buf[512];
-    memset(buf, 0, sizeof(buf));
-    // 使用lseek定位到当前偏移位置
-    sprint("=============\n");
-    spike_file_lseek(f, *offset, SEEK_SET);
-    sprint("=============\n");
-
-    // 读取目录项数据到缓冲区
-    long ret = frontend_syscall(HTIFSYS_getdents, f->kfd, (uint64)buf, sizeof(buf), 0, 0, 0, 0);
-    if (ret < 0) {
-        // 读取目录项失败或没有目录
-        return -1;
-    }
-    struct dirent *dent = (struct dirent *)buf;
-
-    // 检查目录项是否有效
-    if (dent->d_reclen == 0 || dent->d_reclen > ret) {
+    if (dir_vinode == NULL || dir == NULL || offset == NULL) {
         return -1;
     }
 
-    safestrcpy(dir->name, dent->d_name, MAX_FILE_NAME_LEN - 1);
-    dir->name[MAX_FILE_NAME_LEN - 1] = '\0'; // 确保字符串以null结尾
-    dir->inum = (int)dent->d_ino;
+    // hostfs uses host-side directory metadata, and getdents is unavailable in
+    // this Spike runtime. We enumerate children from the VFS dentry cache.
+    struct dentry *target = NULL;
+    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+        struct hash_node *node = dentry_hash_table.head[i].next;
+        while (node) {
+            struct dentry *d = (struct dentry *)node->value;
+            if (d && d->dentry_inode == dir_vinode) {
+                target = d;
+                break;
+            }
+            node = node->next;
+        }
+        if (target) break;
+    }
 
-    // 更新偏移量
-    *offset += dent->d_reclen;
+    if (target == NULL) {
+        return -1;
+    }
 
+    int idx = 0;
+    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+        struct hash_node *node = dentry_hash_table.head[i].next;
+        while (node) {
+            struct dentry *d = (struct dentry *)node->value;
+            if (d && d->parent == target) {
+                if (idx == *offset) {
+                    safestrcpy(dir->name, d->name, MAX_FILE_NAME_LEN);
+                    dir->inum = d->dentry_inode ? d->dentry_inode->inum : -1;
+                    (*offset)++;
+                    return 0;
+                }
+                idx++;
+            }
+            node = node->next;
+        }
+    }
     return -1;
 }
 
