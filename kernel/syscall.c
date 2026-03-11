@@ -25,6 +25,45 @@
 
 #include <stdlib.h>
 
+struct io_pipline_t {
+    int stdin_close;                   // 1为写入端关闭，写入系统buf进行调用；0为正常调用
+    int stdout_close;                  // 1为读取端关闭，读取系统buf进行调用；0为正常调用
+    char buf[2][IO_PIPELINE_BUF_SIZE]; // 系统调用buf
+    int buf_len;                       // 系统调用buf长度
+    int buf_pos;                       // 系统调用buf读取位置
+} pipline_buf[NCPU];
+
+static int pipline_num[NCPU] = {0};
+
+ssize_t sys_user_pipline_write() {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    pipline_buf[hartid].stdin_close = 1;
+    return 0;
+}
+
+ssize_t sys_user_pipline_read() {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    pipline_buf[hartid].stdout_close = 1;
+    pipline_num[hartid] = (pipline_num[hartid] + 1) % 2;
+    return 0;
+}
+
+ssize_t sys_user_pipline_reset() {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    pipline_buf[hartid].stdin_close = 0;
+    pipline_buf[hartid].stdout_close = 0;
+    pipline_buf[hartid].buf_len = 0;
+    pipline_buf[hartid].buf_pos = 0;
+    memset(pipline_buf[hartid].buf, 0, IO_PIPELINE_BUF_SIZE);
+    return 0;
+}
+
 //
 // implement the SYS_user_print syscall
 //
@@ -35,7 +74,15 @@ ssize_t sys_user_print(const char *buf, size_t n) {
     assert(hartid < NCPU);
     assert(current[hartid]);
     char *pa = (char *)user_va_to_pa((pagetable_t)(current[hartid]->pagetable), (void *)buf);
-    sprint("%s", pa);
+    if (pipline_buf[hartid].stdin_close) {
+        // 如果写入端已经关闭，说明用户程序正在调用printf函数，此时需要将用户程序传入的字符串写入系统调用buf中，等待用户程序调用scanf函数时读取。
+        int total_len = pipline_buf[hartid].buf_len + n;
+        total_len = total_len < IO_PIPELINE_BUF_SIZE ? total_len : IO_PIPELINE_BUF_SIZE;
+        memcpy(pipline_buf[hartid].buf[pipline_num[hartid]] + pipline_buf[hartid].buf_len, pa, total_len - pipline_buf[hartid].buf_len);
+        pipline_buf[hartid].buf_len = total_len;
+    } else {
+        sprint("%s", pa);
+    }
     return 0;
 }
 
@@ -47,7 +94,42 @@ ssize_t sys_user_scanf(const char *buf) {
 #ifdef IO_DEBUG
     sprint("[DEBUG] sys_user_scanf: start scan\n");
 #endif
-    int res = sscanf("%s", pa);
+    int res;
+    if (pipline_buf[hartid].stdout_close) {
+        // 如果读取端已经关闭，说明用户程序正在调用scanf函数，此时需要从系统调用buf中读取字符串，返回给用户程序。
+        int len = 0;
+        while (len < pipline_buf[hartid].buf_len - pipline_buf[hartid].buf_pos) {
+            if (pipline_buf[hartid].buf[(pipline_num[hartid] + 1) % 2][pipline_buf[hartid].buf_pos + len] == '\0'
+                || pipline_buf[hartid].buf[(pipline_num[hartid] + 1) % 2][pipline_buf[hartid].buf_pos + len] == '\n'
+                || pipline_buf[hartid].buf[(pipline_num[hartid] + 1) % 2][pipline_buf[hartid].buf_pos + len] == ' '
+                || pipline_buf[hartid].buf[(pipline_num[hartid] + 1) % 2][pipline_buf[hartid].buf_pos + len] == '\r'
+                || pipline_buf[hartid].buf[(pipline_num[hartid] + 1) % 2][pipline_buf[hartid].buf_pos + len] == '\t') {
+                break;
+            }
+            len++;
+        }
+        if (len == 0) {
+            // 如果没有读取到任何字符串，说明系统调用buf中没有可供读取的字符串，返回0
+            res = 0;
+            pa[len] = '\0'; // 添加字符串结束符
+        } else {
+            // 将读取到的字符串复制到用户程序传入的地址中
+            memcpy(pa, pipline_buf[hartid].buf[(pipline_num[hartid] + 1) % 2] + pipline_buf[hartid].buf_pos, len);
+            pa[len] = '\0'; // 添加字符串结束符
+        }
+        pipline_buf[hartid].buf_pos += strlen(pipline_buf[hartid].buf[(pipline_num[hartid] + 1) % 2] + pipline_buf[hartid].buf_pos) + 1;
+        if (pipline_buf[hartid].buf_pos >= pipline_buf[hartid].buf_len) {
+            // 如果已经读取完系统调用buf中的字符串，重置系统调用buf
+            pipline_buf[hartid].stdin_close = 0;
+            pipline_buf[hartid].stdout_close = 0;
+            pipline_buf[hartid].buf_len = 0;
+            pipline_buf[hartid].buf_pos = 0;
+        }
+        res = 1; // 只扫描了一个字符串，返回1
+    } else {
+        res = sscanf("%s", pa);
+    }
+
 #ifdef IO_DEBUG
     sprint("[DEBUG] sys_user_scanf: finish scan\n");
 #endif
@@ -730,6 +812,12 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
         return sys_user_print_backtrace(a1);
     case SYS_user_gets:
         return sys_user_gets((char *)a1, a2);
+    case SYS_user_pipline_read:
+        return sys_user_pipline_read();
+    case SYS_user_pipline_write:
+        return sys_user_pipline_write();
+    case SYS_user_pipline_reset:
+        return sys_user_pipline_reset();
     default:
         panic("Unknown syscall %ld \n", a0);
     }

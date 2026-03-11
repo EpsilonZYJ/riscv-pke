@@ -14,8 +14,6 @@
 
 char *current_dir = NULL;
 
-int exec_supported_command_t(command_t *cur_command);
-
 void init_shell() {
     current_dir = naive_malloc();
     read_cwd(current_dir);

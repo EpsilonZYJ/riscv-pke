@@ -49,6 +49,10 @@
 #define SYS_user_printpa (SYS_user_base + 34)
 #define SYS_user_print_backtrace (SYS_user_base + 35)
 
+#define SYS_user_pipline_write (SYS_user_base + 36)
+#define SYS_user_pipline_read (SYS_user_base + 37)
+#define SYS_user_pipline_reset (SYS_user_base + 38)
+
 long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7);
 
 #endif

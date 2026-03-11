@@ -56,4 +56,8 @@ void printpa(int *va);
 
 int getsu(const char *buf, int size);
 
+int pipline_write();
+int pipline_read();
+int pipline_reset();
+
 #endif

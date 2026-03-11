@@ -289,3 +289,15 @@ void better_free(void *va) {
 int print_backtrace(int depth) {
     return do_user_call(SYS_user_print_backtrace, depth, 0, 0, 0, 0, 0, 0);
 }
+
+int pipline_write() {
+    return do_user_call(SYS_user_pipline_write, 0, 0, 0, 0, 0, 0, 0);
+}
+
+int pipline_read() {
+    return do_user_call(SYS_user_pipline_read, 0, 0, 0, 0, 0, 0, 0);
+}
+
+int pipline_reset() {
+    return do_user_call(SYS_user_pipline_reset, 0, 0, 0, 0, 0, 0, 0);
+}

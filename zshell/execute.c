@@ -33,21 +33,21 @@ int run_one_command(command_t *cur_command, int wait_child) {
         if (cur_command->para_num == 2) {
             char *path = cur_command->paras->para;
             char *para = cur_command->paras->next->para;
-            launch_process(path, para, wait_child);
+            return launch_process(path, para, wait_child);
         } else if (cur_command->para_num == 1) {
             char *path = cur_command->paras->para;
-            launch_process(path, "", wait_child);
+            return launch_process(path, "", wait_child);
         } else {
             printu("exec: invalid input!\n");
+            return -1;
         }
         return 0;
     }
 
     if (startwith(cur_command->operation, "./") || startwith(cur_command->operation, "/")) {
-        launch_process(cur_command->operation,
-                       cur_command->paras == NULL ? "" : cur_command->paras->para,
-                       wait_child);
-        return 0;
+        return launch_process(cur_command->operation,
+                              cur_command->paras == NULL ? "" : cur_command->paras->para,
+                              wait_child);
     }
 
     int ret = exec_supported_command_t(cur_command);
@@ -57,11 +57,12 @@ int run_one_command(command_t *cur_command, int wait_child) {
 
     const char *alias_val = find_alias(cur_command->operation);
     if (alias_val != NULL) {
-        launch_process((char *)alias_val,
-                       cur_command->paras == NULL ? "" : cur_command->paras->para,
-                       wait_child);
+        return launch_process((char *)alias_val,
+                              cur_command->paras == NULL ? "" : cur_command->paras->para,
+                              wait_child);
     } else {
         printu("Error: unknown command: %s\n", cur_command->operation);
+        return -1;
     }
     return 0;
 }
@@ -130,7 +131,7 @@ int exec_supported_command_t(command_t *cur_command) {
         }
         return 0;
     }
-    return 1;
+    return -1;
 }
 
 int exec_command(command_t *command) {
@@ -144,7 +145,29 @@ int exec_command(command_t *command) {
             run_one_command(cur_command, 1);
             break; // OP_EXEC只会出现一个命令
         } else if (cur_command->op_type == OP_MULTISTART) {
-            run_one_command(cur_command, 0);
+            int ret = run_one_command(cur_command, 0);
+            if (ret == -1) {
+                printu("Error: failed to execute command: %s\n", cur_command->operation);
+            }
+            return -1;
+        } else if (cur_command->op_type == OP_PIPLINE) {
+            while (cur_command->op_type == OP_PIPLINE) {
+                pipline_write();
+                int ret = run_one_command(cur_command, 1);
+                if (ret != 0) {
+                    pipline_reset();
+                    printu("Error: failed to execute command: %s\n", cur_command->operation);
+                    return -1;
+                }
+                pipline_read();
+                cur_command = cur_command->next;
+            }
+            int ret = run_one_command(cur_command, 1);
+            pipline_reset();
+            if (ret != 0) {
+                printu("Error: failed to execute command: %s\n", cur_command->operation);
+                return -1;
+            }
         }
         cur_command = cur_command->next;
     }
