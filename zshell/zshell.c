@@ -98,6 +98,8 @@ int exec_command(command_t *command) {
                 }
             } else if (startwith(command->operation, "./")) {
                 app_exec(cur_command->operation, cur_command->paras == NULL ? "" : cur_command->paras->para);
+            } else if (startwith(command->operation, "/")) {
+                app_exec(cur_command->operation, cur_command->paras == NULL ? "" : cur_command->paras->para);
             } else {
                 int ret = exec_supported_command_t(cur_command);
                 if (ret) {
