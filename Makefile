@@ -76,7 +76,7 @@ USER_MULTIMEM_CPP1 		:= user/app_alloc1.c user/user_lib.c
 
 USER_SHELL_CPPS 	:= user/app_shell.c user/user_lib.c
 
-USER_ZSHELL_CPPS 	:= zshell/*.c user/user_lib.c
+USER_ZSHELL_CPPS 	:= zshell/zshell.c zshell/command.c zshell/parser.c user/user_lib.c
 
 USER_MZSHELL_CPPS 	:= user/app_zshell.c user/user_lib.c
 
