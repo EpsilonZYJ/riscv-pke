@@ -130,6 +130,17 @@ int exec_supported_command_t(command_t *cur_command) {
             printu("pwd: too many arguments\n");
         }
         return 0;
+    } else if (strcmp(cur_command->operation, "mkdir") == 0) {
+        if (cur_command->para_num == 0) {
+            printu("mkdir: missing operand\n");
+        } else {
+            paras_t *para = cur_command->paras;
+            while (para != NULL) {
+                app_mkdir(para->para);
+                para = para->next;
+            }
+        }
+        return 0;
     }
     return -1;
 }
