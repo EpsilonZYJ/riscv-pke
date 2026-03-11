@@ -8,18 +8,6 @@
 #include "command.h"
 #include "zshrc_parser.h"
 
-static void inject_pipe_para_if_needed(command_t *dst, const char *pipe_para) {
-    if (dst == NULL || pipe_para == NULL) return;
-    if (dst->para_num != 0 || dst->paras != NULL) return;
-
-    paras_t *p = better_malloc(sizeof(paras_t));
-    if (p == NULL) return;
-    p->para = (char *)pipe_para;
-    p->next = NULL;
-    dst->paras = p;
-    dst->para_num = 1;
-}
-
 int launch_process(char *path, char *para, int wait_child) {
     int pid = fork();
     if (pid < 0) {
@@ -155,27 +143,6 @@ int exec_command(command_t *command) {
         if (cur_command->op_type == OP_EXEC) {
             run_one_command(cur_command, 1);
             break; // OP_EXEC只会出现一个命令
-        } else if (cur_command->op_type == OP_PIPLINE) {
-            /*
-             * NOTE: this project currently has no pipe/dup syscalls.
-             * We emulate a simple pipeline by sequential execution and
-             * parameter forwarding: if next command has no arg, pass the
-             * current command's first arg as its input parameter.
-             */
-            command_t *p = cur_command;
-            while (p != NULL && p->op_type != OP_DEAD) {
-                run_one_command(p, 1);
-
-                if (p->op_type != OP_PIPLINE || p->next == NULL) {
-                    break;
-                }
-
-                if (p->para_num > 0 && p->paras != NULL) {
-                    inject_pipe_para_if_needed(p->next, p->paras->para);
-                }
-                p = p->next;
-            }
-            break;
         } else if (cur_command->op_type == OP_MULTISTART) {
             run_one_command(cur_command, 0);
         }
