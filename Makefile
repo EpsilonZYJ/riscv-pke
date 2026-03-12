@@ -22,6 +22,17 @@ ifneq (,)
 endif
 
 CFLAGS        	:= -Wall -Werror -gdwarf-3 -fno-builtin -nostdlib -D__NO_INLINE__ -mcmodel=medany -g -Og -std=gnu99 -Wno-unused -Wno-attributes -fno-delete-null-pointer-checks -fno-PIE $(march) -fno-omit-frame-pointer
+
+# Detect host OS and expose a compile-time macro for hostfs flag mapping.
+HOST_OS := $(shell uname -s)
+ifeq ($(HOST_OS),Darwin)
+	CFLAGS += -DHOST_MACOS
+else ifeq ($(HOST_OS),Linux)
+	CFLAGS += -DHOST_LINUX
+else
+	CFLAGS += -HOST_UNKNOWN
+endif
+
 COMPILE       	:= $(CC) -MMD -MP $(CFLAGS) $(SPROJS_INCLUDE)
 
 #---------------------	utils -----------------------
