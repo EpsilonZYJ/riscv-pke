@@ -187,7 +187,12 @@ struct vinode *hostfs_lookup(struct vinode *parent, struct dentry *sub_dentry) {
     char path[MAX_PATH_LEN];
     get_path_string(path, sub_dentry);
 
-    spike_file_t *f = spike_file_open(path, O_RDWR, 0);
+    spike_file_t *f = spike_file_open(path, O_RDONLY, 0);
+    if ((int64)f < 0) {
+        // file/directory does not exist on the host
+        return NULL;
+    }
+    f = spike_file_open(path, O_RDWR, 0);
 
     struct vinode *child_inode = hostfs_alloc_vinode(parent->sb);
     child_inode->i_fs_info = f;
@@ -293,7 +298,29 @@ int hostfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset) {
 }
 
 struct vinode *hostfs_mkdir(struct vinode *parent, struct dentry *sub_dentry) {
-    panic("hostfs_mkdir not implemented!\n");
+    char path[MAX_PATH_LEN];
+    get_path_string(path, sub_dentry);
+
+    // create the directory on the host via mkdirat syscall
+    long ret = frontend_syscall(HTIFSYS_mkdirat, AT_FDCWD, (uint64)path,
+                                strlen(path) + 1, 0755, 0, 0, 0);
+    if (ret < 0) {
+        sprint("hostfs_mkdir: failed to create directory on host (ret=%ld)\n", ret);
+        return NULL;
+    }
+
+    // open the newly created directory to get a file handle for stat
+    spike_file_t *f = spike_file_open(path, O_RDONLY, 0);
+    if ((int64)f < 0) {
+        sprint("hostfs_mkdir: cannot open newly created directory\n");
+        return NULL;
+    }
+
+    struct vinode *new_inode = hostfs_alloc_vinode(parent->sb);
+    new_inode->i_fs_info = f;
+    hostfs_update_vinode(new_inode);
+    new_inode->ref = 0;
+    return new_inode;
     return NULL;
 }
 
