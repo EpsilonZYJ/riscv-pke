@@ -194,7 +194,7 @@ ssize_t sys_user_exit(uint64 code) {
         }
     }
 
-    // FIXME: 可以使用heap_top和heap_bottom来优化释放过程，直接释放整个堆空间，而不需要逐块释放。
+    // HACK: 可以使用heap_top和heap_bottom来优化释放过程，直接释放整个堆空间，而不需要逐块释放。
     for (uint64 heap_va = current[hartid]->user_heap.heap_bottom; heap_va < current[hartid]->user_heap.heap_top; heap_va += PGSIZE) {
         pte_t *pte = page_walk((pagetable_t)current[hartid]->pagetable, heap_va, 0);
         if (pte && (*pte & PTE_V)) {

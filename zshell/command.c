@@ -21,7 +21,6 @@ void app_cd(const char *path) {
 }
 
 void app_cat(const char *filename) {
-    // FIXME: we should read the file in a loop until EOF, but currently we just read it once
     int MAXBUF = 512;
     char buf[MAXBUF];
     int fd = open(filename, O_RDWR);
