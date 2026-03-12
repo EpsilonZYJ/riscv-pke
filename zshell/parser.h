@@ -13,6 +13,7 @@ enum operation_t {
     OP_EXEC,
     OP_PIPLINE,
     OP_MULTISTART,
+    OP_MULTICORE,
 };
 
 typedef struct paras_t {

@@ -92,6 +92,15 @@ command_t *build_command(char *cmdline, command_t *command) {
             // 如果只有一个token，说明是一个没有参数的命令
             cur_command->op_type = OP_EXEC;
             break;
+        } else if (strcmp(token, "&&") == 0) {
+            // 如果下一个token是&&，说明是一个多核多命令
+            cur_command->op_type = OP_MULTICORE;
+            token = skip_current_token(token, " ");
+            if (token == NULL) {
+                printu("Error: && should be followed by a command\n");
+                free_paras(command);
+                return command;
+            }
         } else if (strcmp(token, "&") == 0) {
             // 如果下一个token是&，说明是一个多命令
             cur_command->op_type = OP_MULTISTART;
@@ -120,7 +129,8 @@ command_t *build_command(char *cmdline, command_t *command) {
             paras_t *last_para = head;
             int is_pipline = strcmp(token, "|");
             int is_multistart = strcmp(token, "&");
-            while (token != NULL && is_multistart != 0 && is_pipline) {
+            int is_multicore = strcmp(token, "&&");
+            while (token != NULL && is_multistart != 0 && is_multicore != 0 && is_pipline) {
                 cur_command->para_num++;
                 last_para->next = better_malloc(sizeof(paras_t));
                 if (last_para->next == NULL) {
@@ -138,15 +148,26 @@ command_t *build_command(char *cmdline, command_t *command) {
                 if (token != NULL) {
                     is_pipline = strcmp(token, "|");
                     is_multistart = strcmp(token, "&");
+                    is_multicore = strcmp(token, "&&");
                 } else {
                     is_pipline = 1;
                     is_multistart = 1;
+                    is_multicore = 1;
                 }
             }
             cur_command->paras = head->next;
             better_free(head);
+            if (is_multicore == 0) {
+                cur_command->op_type = OP_MULTICORE;
+                token = skip_current_token(token, " ");
+                if (token == NULL) {
+                    printu("Error: && should be followed by a command\n");
+                    free_paras(command);
+                    return command;
+                }
+            }
             // 如果下一个token是&，说明是一个多命令
-            if (is_multistart == 0) {
+            else if (is_multistart == 0) {
                 cur_command->op_type = OP_MULTISTART;
                 token = skip_current_token(token, " ");
                 if (token == NULL) {

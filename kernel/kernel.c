@@ -28,6 +28,7 @@
 extern char trap_sec_start[];
 
 static volatile int s_counter = 0;
+static volatile int sched_counter = 0;
 
 //
 // turn on paging. added @lab2_1
@@ -96,6 +97,12 @@ process *load_user_program() {
     // retrieve command line arguements
     size_t argc = parse_args(&arg_bug_msg);
     if (!argc) panic("You need to specify the application program!\n");
+
+    // // Non-primary harts may not have a dedicated argv entry.
+    // if (hartid >= argc) {
+    //     proc->status = ZOMBIE;
+    //     return proc;
+    // }
 
     if (strcmp(get_executable_name(arg_bug_msg.argv[hartid]), "riscv-pke") != 0)
         load_bincode_from_host_elf(proc, arg_bug_msg.argv[hartid]);
@@ -173,6 +180,8 @@ int s_start(void) {
 #ifdef INIT_DEBUG
     sprint("[DEBUG] s_start: load user program and insert to ready queue successfully.\n");
 #endif
+
+    sync_barrier(&sched_counter, NCPU);
 
     schedule();
 

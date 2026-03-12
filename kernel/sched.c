@@ -13,6 +13,8 @@
 process *ready_queue_head[NCPU];
 
 static volatile int exit_counter = 0;
+// 全局关机信号，hart 0 决定关机时置1，其余 hart 通过自旋检测后参与 barrier
+static volatile int g_should_shutdown = 0;
 
 //
 // insert a process, proc, into the END of ready queue.
@@ -20,23 +22,31 @@ static volatile int exit_counter = 0;
 void insert_to_ready_queue(process *proc) {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
+    insert_to_specific_ready_queue(proc, hartid);
+}
+
+//
+// insert a process into a SPECIFIC hart's ready queue (used for cross-hart dispatch).
+//
+void insert_to_specific_ready_queue(process *proc, int target_hartid) {
+    assert(target_hartid >= 0 && target_hartid < NCPU);
 #ifdef SYSTEM_INFO_OUTPUT
     sprint("going to insert process %d to ready queue.\n", proc->pid);
 #endif
-    release_proc_slot_reservation(proc->pid);
+    release_proc_slot_reservation(proc->pid); // safe to call multiple times
     // if the queue is empty in the beginning
-    if (ready_queue_head[hartid] == NULL) {
+    if (ready_queue_head[target_hartid] == NULL) {
         if (proc->status != ZOMBIE)
             proc->status = READY;
         proc->queue_next = NULL;
-        ready_queue_head[hartid] = proc;
+        ready_queue_head[target_hartid] = proc;
         return;
     }
 
     // ready queue is not empty
     process *p;
     // browse the ready queue to see if proc is already in-queue
-    for (p = ready_queue_head[hartid]; p->queue_next != NULL; p = p->queue_next)
+    for (p = ready_queue_head[target_hartid]; p->queue_next != NULL; p = p->queue_next)
         if (p == proc) return; // already in queue
 
     // p points to the last element of the ready queue
@@ -133,48 +143,70 @@ void schedule() {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
     if (!ready_queue_head[hartid]) {
-        // by default, if there are no ready process, and all processes are in the status of
-        // FREE and ZOMBIE, we should shutdown the emulated RISC-V machine.
-        int should_shutdown = 1;
-
+        // 本 hart 就绪队列为空时：
+        // 1. 若全部进程已完成（FREE/ZOMBIE），则这是真正的关机时机。
+        // 2. 若存在仍在运行/阻塞的进程（可能在其他 hart 上），则自旋等待新任务或关机信号。
+        int global_all_done = 1;
         for (int i = 0; i < NPROC; i++) {
-            if ((procs[i].status != FREE) && (procs[i].status != ZOMBIE) && (procs[i].trapframe->regs.tp == hartid)) {
-                should_shutdown = 0;
+#ifdef SYSTEM_INFO_OUTPUT
+            switch (procs[i].status) {
+            case FREE:
+                sprint("hartid = %d FREE: process %d.\n", hartid, procs[i].pid);
+                break;
+            case READY:
+                sprint("hartid = %d READY: process %d.\n", hartid, procs[i].pid);
+                break;
+            case RUNNING:
+                sprint("hartid = %d RUNNING: process %d.\n", hartid, procs[i].pid);
+                break;
+            case BLOCKED:
+                sprint("hartid = %d BLOCKED: process %d.\n", hartid, procs[i].pid);
+                break;
+            case ZOMBIE:
+                sprint("hartid = %d ZOMBIE: process %d.\n", hartid, procs[i].pid);
+                break;
+            default:
+                sprint("hartid = %d UNKNOWN STATUS: process %d.\n", hartid, procs[i].pid);
+                break;
+            }
+#endif
+
+            if ((procs[i].status != FREE) && (procs[i].status != ZOMBIE)) {
+                global_all_done = 0;
+                break;
             }
         }
 
-        if (should_shutdown) {
+        if (global_all_done) {
+            // 所有进程均已结束，触发关机流程
+            g_should_shutdown = 1;
+#ifdef SYSTEM_INFO_OUTPUT
+            sprint("^^^^^^^^hartid = %d: no more ready processes, going to shutdown now^^^^^^^^^^\n", hartid);
+            sprint("hartid = %d: no more ready processes, system shutdown now.\n", hartid);
+#endif
             if (hartid == 0) {
                 sync_barrier(&exit_counter, NCPU);
-                // in lab1, PKE considers only one app (one process).
-                // therefore, shutdown the system when the app calls exit()
-#ifdef SYSTEM_INFO_OUTPUT
-                sprint("no more ready processes, system shutdown now.\n");
-#endif
                 shutdown(0);
             } else {
                 sync_barrier(&exit_counter, NCPU);
+                while (1); // hart 0 调用 shutdown() 终止仿真，此处实际不可达
             }
         } else {
-            if (hartid == 0) {
-                sync_barrier(&exit_counter, NCPU);
-                // in lab1, PKE considers only one app (one process).
-                // therefore, shutdown the system when the app calls exit()
-                should_shutdown = 1;
-                for (int i = 0; i < NPROC; i++) {
-                    if ((procs[i].status != FREE) && (procs[i].status != ZOMBIE)) {
-                        should_shutdown = 0;
-                        sprint("process %d is still in state:%d\n", i, procs[i].status);
-                    }
-                }
-                if (!should_shutdown) {
-                    panic("Not handled: we should let system wait for unfinished processes.\n");
-                }
-                sprint("no more ready processes, system shutdown now.\n");
-                shutdown(0);
-            } else {
-                sync_barrier(&exit_counter, NCPU);
+// 全局仍有进程，本 hart 自旋等待新任务派发或全局关机信号
+#ifdef SYSTEM_INFO_OUTPUT
+            sprint("^^^^^^^^^^still have processes running, hartid = %d is going to sleep now^^^^^^^^^^\n", hartid);
+#endif
+            sprint("");
+
+            while (!ready_queue_head[hartid] && !g_should_shutdown) {
+                // 自旋等待
             }
+            if (g_should_shutdown) {
+                // 其他 hart 已决定关机，参与 barrier 后等待终止
+                sync_barrier(&exit_counter, NCPU);
+                while (1); // 不可达
+            }
+            // 就绪队列已有新任务，继续往下调度
         }
     }
 
@@ -307,7 +339,8 @@ int do_wait(int64 pid) {
     } else if (pid == -1) {
         // pid为-1时，等待任意子进程结束
         for (int i = 0; i < NPROC; i++) {
-            if (procs[i].parent == current[hartid] && procs[i].status != FREE && procs[i].trapframe->regs.tp == hartid) {
+            // 允许父进程等待运行在任意 hart 上的子进程（多核场景）
+            if (procs[i].parent == current[hartid] && procs[i].status != FREE) {
                 has_child = 1;
                 if (procs[i].status == ZOMBIE) {
                     // 已结束
@@ -328,4 +361,82 @@ int do_wait(int64 pid) {
 
     schedule();
     return -1; // 不会执行到这里
+}
+
+//
+// 在指定 hart 上 fork 一个子进程。与 do_fork 逻辑相同，
+// 但将子进程插入 target_hartid 的就绪队列，并修正 tp 寄存器。
+//
+int do_fork_to_hart(process *parent, int target_hartid) {
+    assert(target_hartid >= 0 && target_hartid < NCPU);
+#ifdef DO_FORK_OUTPUT
+    sprint("will fork a child from parent %d to hart %d.\n", parent->pid, target_hartid);
+#endif
+    process *child = alloc_process();
+
+    for (int i = 0; i < parent->total_mapped_region; i++) {
+        switch (parent->mapped_info[i].seg_type) {
+        case CONTEXT_SEGMENT:
+            *child->trapframe = *parent->trapframe;
+            break;
+        case STACK_SEGMENT:
+            memcpy((void *)lookup_pa(child->pagetable, child->mapped_info[STACK_SEGMENT].va),
+                   (void *)lookup_pa(parent->pagetable, parent->mapped_info[i].va), PGSIZE);
+            break;
+        case HEAP_SEGMENT: {
+            for (uint64 heap_block = parent->user_heap.heap_bottom;
+                 heap_block < parent->user_heap.heap_top; heap_block += PGSIZE) {
+                pte_t *pte = page_walk(parent->pagetable, heap_block, 0);
+                if (pte && (*pte & PTE_V)) {
+                    uint64 pa = PTE2PA(*pte);
+                    inc_page_ref((void *)pa);
+                    uint64 flags = PTE_FLAGS(*pte);
+                    flags &= ~PTE_W;
+                    flags |= PTE_COW;
+                    user_vm_map(child->pagetable, heap_block, PGSIZE, pa, flags | PTE_V);
+                    *pte = PA2PTE(pa) | flags | PTE_V;
+                    flush_tlb();
+                }
+            }
+            child->mapped_info[HEAP_SEGMENT].npages = parent->mapped_info[HEAP_SEGMENT].npages;
+            child->mapped_info[HEAP_SEGMENT].seg_type = HEAP_SEGMENT;
+            child->mapped_info[HEAP_SEGMENT].va = parent->mapped_info[HEAP_SEGMENT].va;
+            memcpy((void *)&child->user_heap, (void *)&parent->user_heap, sizeof(parent->user_heap));
+            break;
+        }
+        case CODE_SEGMENT:
+            for (int j = 0; j < parent->mapped_info[i].npages; j++) {
+                uint64 addr = lookup_pa(parent->pagetable, parent->mapped_info[i].va + j * PGSIZE);
+                map_pages(child->pagetable, parent->mapped_info[i].va + j * PGSIZE, PGSIZE, addr,
+                          prot_to_type(PROT_WRITE | PROT_READ | PROT_EXEC, 1));
+            }
+            child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
+            child->mapped_info[child->total_mapped_region].npages = parent->mapped_info[i].npages;
+            child->mapped_info[child->total_mapped_region].seg_type = CODE_SEGMENT;
+            child->total_mapped_region++;
+            break;
+        case DATA_SEGMENT:
+            for (int j = 0; j < parent->mapped_info[i].npages; j++) {
+                void *child_pa = alloc_page();
+                uint64 parent_va = parent->mapped_info[i].va + j * PGSIZE;
+                void *parent_pa = (void *)lookup_pa(parent->pagetable, parent_va);
+                memcpy(child_pa, parent_pa, PGSIZE);
+                user_vm_map((pagetable_t)child->pagetable, parent_va, PGSIZE, (uint64)child_pa,
+                            prot_to_type(PROT_WRITE | PROT_READ, 1));
+            }
+            child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
+            child->mapped_info[child->total_mapped_region].npages = parent->mapped_info[i].npages;
+            child->mapped_info[child->total_mapped_region].seg_type = DATA_SEGMENT;
+            child->total_mapped_region++;
+            break;
+        }
+    }
+
+    child->status = READY;
+    child->trapframe->regs.a0 = 0;             // 子进程 fork 返回值为 0
+    child->trapframe->regs.tp = target_hartid; // 指定运行的 hart
+    child->parent = parent;
+    insert_to_specific_ready_queue(child, target_hartid);
+
+    return child->pid; // 父进程获得子进程 pid
 }
