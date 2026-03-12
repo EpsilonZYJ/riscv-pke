@@ -157,7 +157,15 @@ ssize_t sys_user_exit(uint64 code) {
     assert(hartid < NCPU);
     sprint("hartid = %d: User exit with code:%d.\n", hartid, code);
     // reclaim the current process, and reschedule. added @lab3_1
-    process *tmp = wake_from_block_queue(&block_queue_head[hartid], current[hartid]);
+    process *tmp = NULL;
+    int parent_hartid = -1;
+    for (int h = 0; h < NCPU; h++) {
+        tmp = wake_from_block_queue(&block_queue_head[h], current[hartid]);
+        if (tmp != NULL) {
+            parent_hartid = h;
+            break;
+        }
+    }
     free_process(current[hartid]);
 
     // 先处理未被free的内存块
@@ -201,9 +209,8 @@ ssize_t sys_user_exit(uint64 code) {
         schedule();
         return 0;
     }
-    current[hartid] = tmp;
-    current[hartid]->status = READY;
-    insert_to_ready_queue(current[hartid]);
+    tmp->status = READY;
+    insert_to_specific_ready_queue(tmp, parent_hartid);
     schedule();
 
     return 0;
@@ -400,6 +407,20 @@ ssize_t sys_user_fork() {
     sprint("hartid = %d: User call fork.\n", hartid);
 #endif
     return do_fork(current[hartid]);
+}
+
+ssize_t sys_user_fork_to(int target_hartid) {
+    uint64 hartid = read_tp();
+    assert(hartid < NCPU);
+    assert(current[hartid]);
+    if (target_hartid < 0 || target_hartid >= NCPU) {
+        return -1;
+    }
+    return do_fork_to_hart(current[hartid], target_hartid);
+}
+
+ssize_t sys_user_get_ncpu() {
+    return NCPU;
 }
 
 //
@@ -762,6 +783,10 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
         return sys_user_free_mem(a1);
     case SYS_user_fork:
         return sys_user_fork();
+    case SYS_user_fork_to:
+        return sys_user_fork_to(a1);
+    case SYS_user_get_ncpu:
+        return sys_user_get_ncpu();
     case SYS_user_yield:
         return sys_user_yield();
     // added @lab4_1

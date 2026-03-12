@@ -19,6 +19,8 @@ int exit(int code);
 void *naive_malloc();
 void naive_free(void *va);
 int fork();
+int fork_to(int target_hartid);
+int get_ncpu();
 void yield();
 
 int sem_new(int initval);

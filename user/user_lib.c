@@ -120,6 +120,14 @@ int fork() {
     return do_user_call(SYS_user_fork, 0, 0, 0, 0, 0, 0, 0);
 }
 
+int fork_to(int target_hartid) {
+    return do_user_call(SYS_user_fork_to, target_hartid, 0, 0, 0, 0, 0, 0);
+}
+
+int get_ncpu() {
+    return do_user_call(SYS_user_get_ncpu, 0, 0, 0, 0, 0, 0, 0);
+}
+
 //
 // lib call to yield
 //
