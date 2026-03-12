@@ -209,6 +209,7 @@ struct vinode *hostfs_create(struct vinode *parent, struct dentry *sub_dentry) {
     char path[MAX_PATH_LEN];
     get_path_string(path, sub_dentry);
 
+    // FIXME: 无法正常创建文件
     spike_file_t *f = spike_file_open(path, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
     if ((int64)f < 0) {
         sprint("hostfs_create cannot create the given file.\n");
