@@ -1,8 +1,8 @@
 #include "user_lib.h"
 #include "util/types.h"
 
-// #define N 5
-#define N 200
+#define N 5
+// #define N 200
 #define BASE 5
 
 int main(void) {
