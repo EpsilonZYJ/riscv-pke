@@ -8,9 +8,11 @@
 #include "pmm.h"
 #include "string.h"
 #include "sync_utils.h"
+#include "lock.h"
 #include "debug_config.h"
 
 process *ready_queue_head[NCPU];
+static volatile int g_ready_queue_lock[NCPU] = {0}; // per-hart ready queue lock, protects the ready queue of each hart
 
 static volatile int exit_counter = 0;
 // 全局关机信号，hart 0 决定关机时置1，其余 hart 通过自旋检测后参与 barrier
@@ -35,27 +37,38 @@ void insert_to_specific_ready_queue(process *proc, int target_hartid) {
 #endif
     release_proc_slot_reservation(proc->pid); // safe to call multiple times
     // if the queue is empty in the beginning
+
+    spin_lock(&g_ready_queue_lock[target_hartid]);
+
     if (ready_queue_head[target_hartid] == NULL) {
         if (proc->status != ZOMBIE)
             proc->status = READY;
         proc->queue_next = NULL;
         ready_queue_head[target_hartid] = proc;
+        spin_unlock(&g_ready_queue_lock[target_hartid]);
         return;
     }
 
     // ready queue is not empty
     process *p;
     // browse the ready queue to see if proc is already in-queue
-    for (p = ready_queue_head[target_hartid]; p->queue_next != NULL; p = p->queue_next)
-        if (p == proc) return; // already in queue
+    for (p = ready_queue_head[target_hartid]; p->queue_next != NULL; p = p->queue_next) {
+        if (p == proc) {
+            spin_unlock(&g_ready_queue_lock[target_hartid]);
+            return;
+        } // already in queue
+    }
 
     // p points to the last element of the ready queue
-    if (p == proc) return;
+    if (p == proc) {
+        spin_unlock(&g_ready_queue_lock[target_hartid]);
+        return;
+    }
     p->queue_next = proc;
     if (proc->status != ZOMBIE)
         proc->status = READY;
     proc->queue_next = NULL;
-
+    spin_unlock(&g_ready_queue_lock[target_hartid]);
     return;
 }
 
@@ -142,7 +155,12 @@ extern process procs[NPROC];
 void schedule() {
     uint64 hartid = read_tp();
     assert(hartid < NCPU);
-    if (!ready_queue_head[hartid]) {
+
+    spin_lock(&g_ready_queue_lock[hartid]);
+    int condition = !ready_queue_head[hartid];
+    spin_unlock(&g_ready_queue_lock[hartid]);
+
+    if (condition) {
         // 本 hart 就绪队列为空时：
         // 1. 若全部进程已完成（FREE/ZOMBIE），则这是真正的关机时机。
         // 2. 若存在仍在运行/阻塞的进程（可能在其他 hart 上），则自旋等待新任务或关机信号。
@@ -196,10 +214,16 @@ void schedule() {
 #ifdef SYSTEM_INFO_OUTPUT
             sprint("^^^^^^^^^^still have processes running, hartid = %d is going to sleep now^^^^^^^^^^\n", hartid);
 #endif
-            sprint("");
 
-            while (!ready_queue_head[hartid] && !g_should_shutdown) {
+            while (!g_should_shutdown) {
                 // 自旋等待
+                spin_lock(&g_ready_queue_lock[hartid]);
+                int ready_to_shut_down = !ready_queue_head[hartid];
+                spin_unlock(&g_ready_queue_lock[hartid]);
+                if (!ready_to_shut_down) {
+                    // 就绪队列已有新任务，继续往下调度
+                    break;
+                }
             }
             if (g_should_shutdown) {
                 // 其他 hart 已决定关机，参与 barrier 后等待终止
