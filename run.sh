@@ -5,4 +5,4 @@ make
 rm -rf output.txt
 echo "============================Compile Complete==============================="
 #spike -p2 obj/riscv-pke /bin/app_zshell
-spike -p2 obj/riscv-pke /bin/zsh
+spike -p4 obj/riscv-pke /bin/zsh

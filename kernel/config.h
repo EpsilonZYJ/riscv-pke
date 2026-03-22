@@ -4,7 +4,7 @@
 #include "util/macro.h"
 
 // we use two HART (cpu) in challenge3
-#define NCPU 2
+#define NCPU 4
 
 // 信号量最大支持数目
 #define NSEMAPHORE 16

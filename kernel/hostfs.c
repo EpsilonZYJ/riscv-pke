@@ -321,7 +321,6 @@ struct vinode *hostfs_mkdir(struct vinode *parent, struct dentry *sub_dentry) {
     hostfs_update_vinode(new_inode);
     new_inode->ref = 0;
     return new_inode;
-    return NULL;
 }
 
 /**** vfs-hostfs hook interface functions ****/

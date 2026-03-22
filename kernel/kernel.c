@@ -103,8 +103,7 @@ process *load_user_program() {
     //     proc->status = ZOMBIE;
     //     return proc;
     // }
-
-    if (strcmp(get_executable_name(arg_bug_msg.argv[hartid]), "riscv-pke") != 0)
+    if (hartid < argc && (get_executable_name(arg_bug_msg.argv[hartid]), "riscv-pke") != 0)
         load_bincode_from_host_elf(proc, arg_bug_msg.argv[hartid]);
     else {
         proc->status = ZOMBIE;
