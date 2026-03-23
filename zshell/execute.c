@@ -179,15 +179,6 @@ int exec_supported_command_t(command_t *cur_command) {
             app_echo(filepath, content);
         }
         return 0;
-    } else if (strcmp(cur_command->operation, "cd") == 0) {
-        if (cur_command->para_num == 0) {
-            app_cd("/");
-        } else if (cur_command->para_num == 1) {
-            app_cd(cur_command->paras->para);
-        } else {
-            printu("cd: too many arguments\n");
-        }
-        return 0;
     } else if (strcmp(cur_command->operation, "pwd") == 0) {
         if (cur_command->para_num == 0) {
             app_pwd();

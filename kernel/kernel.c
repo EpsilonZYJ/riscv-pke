@@ -171,7 +171,6 @@ int s_start(void) {
     // added @lab3_1
     process *user_proc = load_user_program();
     if (user_proc->status == ZOMBIE) {
-        sprint("hartid = %d: User exit with code:%d.\n", hartid, 0);
         free_process(user_proc);
     } else {
         insert_to_ready_queue(user_proc);
