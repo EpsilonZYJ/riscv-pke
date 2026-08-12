@@ -101,7 +101,7 @@ Machine │  boot & trap vectors (mentry.S, minit.c, mtrap.c), per-hart timer   
 $ ./docker_mount.sh        # creates/enters a container with toolchain + Spike preinstalled
 ```
 
-(`docker_install.sh` shows how the image's toolchain was built, for reference.)
+The script mounts the repository at `/app/riscv-pke` inside the container (the image keeps its toolchain at `/app/riscv_arm`).
 
 ### Option B — build the environment manually
 
